@@ -178,16 +178,6 @@ ALL_JOKES = [
     "¿Qué hace una lámpara en una fiesta? Ilumina la diversión."
 ]
 
-# Función para obtener un chiste aleatorio sin repetir hasta agotar la lista
-unused_jokes = ALL_JOKES.copy()
-def get_random_joke():
-    global unused_jokes, ALL_JOKES
-    if not unused_jokes:
-        unused_jokes = ALL_JOKES.copy()
-    joke = random.choice(unused_jokes)
-    unused_jokes.remove(joke)
-    return joke
-
 ##############################
 # FUNCIÓN PARA OTORGAR RECOMPENSAS SIMBÓLICAS (ESTRELLAS)
 ##############################
@@ -198,14 +188,17 @@ def award_symbolic_reward(user: discord.Member, reward: int):
         data['participants'][user_id] = {
             'nombre': user.display_name,
             'puntos': 0,          # Puntaje del torneo (se mantiene separado)
-            'symbolic': 0,        # Estrellas simbólicas ganadas en juegos de entretenimiento
+            'symbolic': 0,        # Estrellas simbólicas
             'etapa': current_stage,
             'logros': []
         }
     else:
         if 'symbolic' not in data['participants'][user_id]:
             data['participants'][user_id]['symbolic'] = 0
-    current_symbolic = int(data['participants'][user_id].get('symbolic', 0))
+    try:
+        current_symbolic = int(data['participants'][user_id].get('symbolic', 0))
+    except:
+        current_symbolic = 0
     new_symbolic = current_symbolic + reward
     data['participants'][user_id]['symbolic'] = new_symbolic
     save_data(data)
@@ -258,7 +251,6 @@ intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
-# Función auxiliar para enviar mensajes al canal público
 async def send_public_message(message: str):
     public_channel = bot.get_channel(PUBLIC_CHANNEL_ID)
     if public_channel:
@@ -268,7 +260,6 @@ async def send_public_message(message: str):
 
 ##############################
 # COMANDOS DEL SISTEMA DE PUNTOS (con “!” – Solo el Propietario en canal privado)
-# (Estos afectan el puntaje del torneo, NO las recompensas simbólicas)
 ##############################
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: discord.Member, puntos: int):
@@ -438,7 +429,6 @@ async def on_message(message):
             "   - **meme** o **muéstrame un meme:** Muestra un meme aleatorio.\n"
             "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras; si ganas, ganas 1 estrella simbólica.\n"
             "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes; el ganador gana 1 estrella simbólica.\n"
-            "   - **comandos** o **lista de comandos:** Muestra este resumen de comandos.\n"
         )
         await message.channel.send(help_text)
         return
@@ -449,9 +439,8 @@ async def on_message(message):
         user_id = str(message.author.id)
         symbolic = 0
         if user_id in data['participants']:
-            symbolic = data['participants'][user_id].get('symbolic', 0)
             try:
-                symbolic = int(symbolic)
+                symbolic = int(data['participants'][user_id].get('symbolic', 0))
             except:
                 symbolic = 0
         await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
@@ -480,7 +469,6 @@ async def on_message(message):
             await message.channel.send(f"**Trivia:** {trivia['question']}\n_Responde en el chat._")
             return
 
-    # Si hay una trivia activa en este canal, verifica la respuesta
     if message.channel.id in active_trivia:
         trivia = active_trivia[message.channel.id]
         if message.content.lower().strip() == trivia['answer'].lower():
@@ -578,7 +566,9 @@ async def on_message(message):
         await message.channel.send(get_random_joke())
         return
 
-    await bot.process_commands(message)
+    # Procesar comandos solo si el mensaje empieza con el prefijo
+    if message.content.startswith(PREFIX):
+        await bot.process_commands(message)
 
 ##############################
 # EVENTO ON_READY
