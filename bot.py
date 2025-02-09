@@ -18,7 +18,7 @@ PUBLIC_CHANNEL_ID  = 1338126297666424874  # REEMPLAZA con el ID del canal públi
 ##############################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
 ##############################
-# Render inyecta la variable DATABASE_URL
+# Render inyecta la variable de entorno DATABASE_URL con la Internal Database URL
 DATABASE_URL = os.environ.get("DATABASE_URL")
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
@@ -115,49 +115,9 @@ def award_symbolic_reward(user: discord.Member, reward: int):
     return new_symbolic
 
 ##############################
-# Variables para estados de juegos naturales
-##############################
-active_trivia = {}  # key: channel.id, value: { "question": ..., "answer": ... }
-
-trivia_questions = [
-    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas"},
-    {"question": "¿En qué año llegó el hombre a la Luna?", "answer": "1969"},
-    {"question": "¿Cuál es el planeta más cercano al Sol?", "answer": "mercurio"},
-    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez"},
-    {"question": "¿Cuál es el animal terrestre más rápido?", "answer": "guepardo"},
-    {"question": "¿Cuántos planetas hay en el sistema solar?", "answer": "8"},
-    {"question": "¿En qué continente se encuentra Egipto?", "answer": "áfrica"},
-    {"question": "¿Cuál es el idioma más hablado en el mundo?", "answer": "chino"},
-    {"question": "¿Qué instrumento mide la temperatura?", "answer": "termómetro"},
-    {"question": "¿Cuál es la capital de Francia?", "answer": "parís"}
-]
-
-MEMES = [
-    "https://i.imgflip.com/1bij.jpg",
-    "https://i.imgflip.com/26am.jpg",
-    "https://i.imgflip.com/30b1gx.jpg",
-    "https://i.imgflip.com/3si4.jpg",
-    "https://i.imgflip.com/2fm6x.jpg"
-]
-
-predicciones = [
-    "Hoy, las estrellas te favorecen... ¡pero recuerda usar protector solar!",
-    "El oráculo dice: el mejor momento para actuar es ahora, ¡sin miedo!",
-    "Tu destino es tan brillante que necesitarás gafas de sol.",
-    "El futuro es incierto, pero las risas están garantizadas.",
-    "Hoy encontrarás una sorpresa inesperada... ¡quizás un buen chiste!",
-    "El universo conspira a tu favor, ¡aprovéchalo!",
-    "Tu suerte cambiará muy pronto, y será motivo de celebración.",
-    "Las oportunidades se presentarán, solo debes estar listo para recibirlas.",
-    "El oráculo revela que una gran aventura te espera en el horizonte.",
-    "Confía en tus instintos, el camino correcto se te mostrará."
-]
-
-##############################
-# Configuración de chistes
+# CHISTES: 120 chistes (70 originales + 50 nuevos)
 ##############################
 ALL_JOKES = [
-    # (Aquí se incluyen los 120 chistes tal como en el ejemplo anterior)
     # --- 70 chistes originales ---
     "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
     "¿Por qué los pájaros no usan Facebook? Porque ya tienen Twitter.",
@@ -229,7 +189,7 @@ ALL_JOKES = [
     "¿Qué le dijo una estrella a otra? Brilla, que brillas.",
     "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
     "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma.",
-    # --- 50 chistes nuevos ---
+    # --- 50 chistes nuevos (adicionales) ---
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones.",
     "¿Por qué la bicicleta no se siente sola? Porque siempre tiene dos ruedas.",
@@ -290,6 +250,48 @@ def get_random_joke():
     joke = random.choice(unused_jokes)
     unused_jokes.remove(joke)
     return joke
+
+##############################
+# VARIABLES PARA ESTADOS DE JUEGOS NATURALES
+##############################
+active_trivia = {}  # key: channel.id, value: { "question": ..., "answer": ... }
+
+##############################
+# OTRAS VARIABLES (Trivia, Memes, Predicciones)
+##############################
+trivia_questions = [
+    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas"},
+    {"question": "¿En qué año llegó el hombre a la Luna?", "answer": "1969"},
+    {"question": "¿Cuál es el planeta más cercano al Sol?", "answer": "mercurio"},
+    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez"},
+    {"question": "¿Cuál es el animal terrestre más rápido?", "answer": "guepardo"},
+    {"question": "¿Cuántos planetas hay en el sistema solar?", "answer": "8"},
+    {"question": "¿En qué continente se encuentra Egipto?", "answer": "áfrica"},
+    {"question": "¿Cuál es el idioma más hablado en el mundo?", "answer": "chino"},
+    {"question": "¿Qué instrumento mide la temperatura?", "answer": "termómetro"},
+    {"question": "¿Cuál es la capital de Francia?", "answer": "parís"}
+]
+
+MEMES = [
+    "https://i.imgflip.com/1bij.jpg",
+    "https://i.imgflip.com/26am.jpg",
+    "https://i.imgflip.com/30b1gx.jpg",
+    "https://i.imgflip.com/3si4.jpg",
+    "https://i.imgflip.com/2fm6x.jpg"
+]
+
+predicciones = [
+    "Hoy, las estrellas te favorecen... ¡pero recuerda usar protector solar!",
+    "El oráculo dice: el mejor momento para actuar es ahora, ¡sin miedo!",
+    "Tu destino es tan brillante que necesitarás gafas de sol.",
+    "El futuro es incierto, pero las risas están garantizadas.",
+    "Hoy encontrarás una sorpresa inesperada... ¡quizás un buen chiste!",
+    "El universo conspira a tu favor, ¡aprovéchalo!",
+    "Tu suerte cambiará muy pronto, y será motivo de celebración.",
+    "Las oportunidades se presentarán, solo debes estar listo para recibirlas.",
+    "El oráculo revela que una gran aventura te espera en el horizonte.",
+    "Confía en tus instintos, el camino correcto se te mostrará."
+]
 
 ##############################
 # INICIALIZACIÓN DEL BOT
@@ -374,7 +376,6 @@ async def avanzar_etapa(ctx):
     sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
     cutoff = STAGES[current_stage]
     avanzan = sorted_players[:cutoff]
-    # En este ejemplo, se actualizará la etapa de los jugadores que avanzan
     for uid, player in avanzan:
         player["etapa"] = current_stage
         upsert_participant(uid, player)
@@ -454,7 +455,7 @@ async def on_message(message):
         await message.channel.send(help_text)
         return
 
-    # MIS ESTRELLAS
+    # MIS ESTRELLAS: muestra cuántas estrellas simbólicas tiene el usuario
     if "misestrellas" in content:
         participant = get_participant(str(message.author.id))
         symbolic = 0
@@ -466,7 +467,7 @@ async def on_message(message):
         await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
         return
 
-    # TOP ESTRELLAS
+    # TOP ESTRELLAS: muestra el top 10 de usuarios con más estrellas simbólicas
     if "topestrellas" in content:
         data = get_all_participants()
         sorted_by_symbolic = sorted(
