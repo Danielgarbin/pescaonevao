@@ -430,7 +430,7 @@ async def on_message(message):
             "**Resumen de Comandos (Lenguaje Natural):**\n\n"
             "   - **ranking:** Muestra tu posición y puntaje del torneo.\n"
             "   - **topmejores:** Muestra el ranking de los 10 jugadores con mayor puntaje del torneo.\n"
-            "   - **misestrellas:** Muestra tus estrellas simbólicas.\n"
+            "   - **misestrellas:** Muestra cuántas estrellas simbólicas tienes.\n"
             "   - **topestrellas:** Muestra el ranking de los 10 jugadores con más estrellas simbólicas.\n"
             "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio (sin repetir hasta agotar la lista de 120 chistes).\n"
             "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia; si respondes correctamente, ganas 1 estrella simbólica.\n"
@@ -443,15 +443,21 @@ async def on_message(message):
         await message.channel.send(help_text)
         return
 
-    # MIS ESTRELLAS: muestra cuántas estrellas simbólicas tienes
+    # MIS ESTRELLAS: muestra cuántas estrellas simbólicas tiene el usuario
     if "misestrellas" in content:
         data = load_data()
         user_id = str(message.author.id)
-        symbolic = int(data['participants'].get(user_id, {}).get('symbolic', 0))
+        symbolic = 0
+        if user_id in data['participants']:
+            symbolic = data['participants'][user_id].get('symbolic', 0)
+            try:
+                symbolic = int(symbolic)
+            except:
+                symbolic = 0
         await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
         return
 
-    # TOP ESTRELLAS: muestra el top 10 de los que tienen más estrellas simbólicas
+    # TOP ESTRELLAS: muestra el top 10 de usuarios con más estrellas simbólicas
     if "topestrellas" in content:
         data = load_data()
         sorted_by_symbolic = sorted(
