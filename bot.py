@@ -8,11 +8,19 @@ import os
 from flask import Flask
 import threading
 
-# Conexión a la base de datos SQLite
+# ***********************
+# CONFIGURACIÓN DEL PROPIETARIO Y CANALES
+# ***********************
+OWNER_ID = 1336609089656197171  # Reemplaza este número con tu propio Discord ID (como entero)
+PRIVATE_CHANNEL_ID = 1338130641354620988  # ID del canal privado donde enviarás comandos sensibles
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público donde se mostrarán los resultados
+
+# ***********************
+# CONEXIÓN A LA BASE DE DATOS SQLITE
+# ***********************
 conn = sqlite3.connect('tournament.db')
 cursor = conn.cursor()
 
-# Crear la tabla de jugadores si no existe
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS players (
         id INTEGER PRIMARY KEY,
@@ -22,13 +30,16 @@ cursor.execute('''
 ''')
 conn.commit()
 
-# Configuración inicial
-# El token se tomará de la variable de entorno "DISCORD_TOKEN"
+# ***********************
+# CONFIGURACIÓN INICIAL
+# ***********************
 PREFIX = '!'
 STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Etapa: jugadores que avanzan
 current_stage = 1
 
-# Sistema de almacenamiento (JSON)
+# ***********************
+# SISTEMA DE ALMACENAMIENTO (JSON)
+# ***********************
 def save_data(data):
     with open('tournament_data.json', 'w') as f:
         json.dump(data, f)
@@ -40,38 +51,81 @@ def load_data():
     except FileNotFoundError:
         return {"participants": {}}
 
-# Inicialización del bot
+# ***********************
+# INICIALIZACIÓN DEL BOT
+# ***********************
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
-
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
-# ----------------------------
-# Comandos de gestión de puntuaciones
-# ----------------------------
+# Función auxiliar para enviar mensajes al canal público
+async def send_public_message(message: str):
+    public_channel = bot.get_channel(PUBLIC_CHANNEL_ID)
+    if public_channel:
+        await public_channel.send(message)
+    else:
+        print("No se pudo encontrar el canal público.")
+
+# ***********************
+# COMANDOS DE GESTIÓN DE PUNTUACIONES (Solo el propietario y solo desde el canal privado)
+# ***********************
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: discord.Member, puntos: int):
+    # Verifica que el autor sea el propietario y que el comando se ejecute en el canal privado
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+
+    try:
+        puntos = int(puntos)
+    except ValueError:
+        await send_public_message("Por favor, proporciona un número válido de puntos.")
+        return
+
     data = load_data()
     user_id = str(jugador.id)
-    
     if user_id in data['participants']:
-        data['participants'][user_id]['puntos'] += puntos
+        puntos_actuales = int(data['participants'][user_id].get('puntos', 0))
+        data['participants'][user_id]['puntos'] = puntos_actuales + puntos
     else:
         data['participants'][user_id] = {
             'nombre': jugador.display_name,
             'puntos': puntos,
             'etapa': current_stage
         }
-    
     save_data(data)
-    await ctx.send(f"✅ Puntuación actualizada: {jugador.display_name} ahora tiene {data['participants'][user_id]['puntos']} puntos")
+    await send_public_message(f"✅ Puntuación actualizada: {jugador.display_name} ahora tiene {data['participants'][user_id]['puntos']} puntos")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
+@bot.command()
+async def reducir_puntuacion(ctx, jugador: discord.Member, puntos: int):
+    # Se utiliza actualizar_puntuacion con valor negativo
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    await actualizar_puntuacion(ctx, jugador, -puntos)
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+# ***********************
+# COMANDOS DE CONSULTA (abiertos para todos)
+# ***********************
 @bot.command()
 async def ver_puntuacion(ctx):
     data = load_data()
     user_id = str(ctx.author.id)
-    
     if user_id in data['participants']:
         await ctx.send(f"🏆 Tu puntuación actual es: {data['participants'][user_id]['puntos']}")
     else:
@@ -80,32 +134,32 @@ async def ver_puntuacion(ctx):
 @bot.command()
 async def clasificacion(ctx):
     data = load_data()
-    # Ordenar participantes por puntos de forma descendente
-    sorted_players = sorted(data['participants'].items(), key=lambda item: item[1]['puntos'], reverse=True)
-    
+    sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
     ranking = "🏅 Clasificación Actual:\n"
     for idx, (user_id, player) in enumerate(sorted_players, 1):
         ranking += f"{idx}. {player['nombre']} - {player['puntos']} puntos\n"
-    
     await ctx.send(ranking)
 
-# ----------------------------
-# Comandos de gestión del torneo
-# ----------------------------
+# ***********************
+# COMANDOS DE GESTIÓN DEL TORNEO (Solo el propietario y solo desde el canal privado)
+# ***********************
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def avanzar_etapa(ctx):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+
     global current_stage
     current_stage += 1
     data = load_data()
-    
-    # Ordenar jugadores y seleccionar los que avanzan
-    sorted_players = sorted(data['participants'].items(), key=lambda item: item[1]['puntos'], reverse=True)
+    sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
     cutoff = STAGES[current_stage]
     avanzan = sorted_players[:cutoff]
     eliminados = sorted_players[cutoff:]
     
-    # Notificar a los jugadores que avanzan
     for user_id, player in avanzan:
         try:
             user = await bot.fetch_user(int(user_id))
@@ -113,7 +167,6 @@ async def avanzar_etapa(ctx):
         except Exception as e:
             print(f"Error al enviar mensaje a {user_id}: {e}")
     
-    # Notificar a los jugadores eliminados
     for user_id, player in eliminados:
         try:
             user = await bot.fetch_user(int(user_id))
@@ -121,17 +174,25 @@ async def avanzar_etapa(ctx):
         except Exception as e:
             print(f"Error al enviar mensaje a {user_id}: {e}")
     
-    # Conservar solo a los jugadores que avanzaron
     data['participants'] = {user_id: player for user_id, player in avanzan}
     save_data(data)
-    await ctx.send(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron")
+    await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
 @bot.command()
-@commands.has_permissions(administrator=True)
 async def eliminar_jugador(ctx, jugador: discord.Member):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+
     data = load_data()
     user_id = str(jugador.id)
-    
     if user_id in data['participants']:
         del data['participants'][user_id]
         save_data(data)
@@ -139,13 +200,34 @@ async def eliminar_jugador(ctx, jugador: discord.Member):
             await jugador.send("🚫 Has sido eliminado del torneo")
         except:
             pass
-        await ctx.send(f"✅ {jugador.display_name} eliminado del torneo")
+        await send_public_message(f"✅ {jugador.display_name} eliminado del torneo")
     else:
-        await ctx.send("❌ Jugador no encontrado")
+        await send_public_message("❌ Jugador no encontrado")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
-# ----------------------------
-# Comandos de entretenimiento
-# ----------------------------
+@bot.command()
+async def configurar_etapa(ctx, etapa: int):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+
+    global current_stage
+    current_stage = etapa
+    await send_public_message(f"✅ Etapa actual configurada a {etapa}")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+# ***********************
+# COMANDO DE ENTRETENIMIENTO (abierto para todos)
+# ***********************
 JOKES = [
     "¿Qué hace un pez en el agua? ¡Nada!",
     "¿Cómo se dice pañuelo en japonés? Saka-moko",
@@ -156,23 +238,16 @@ JOKES = [
 async def chiste(ctx):
     await ctx.send(random.choice(JOKES))
 
-# ----------------------------
-# Sistema de etapas y notificaciones
-# ----------------------------
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def configurar_etapa(ctx, etapa: int):
-    global current_stage
-    current_stage = etapa
-    await ctx.send(f"✅ Etapa actual configurada a {etapa}")
-
+# ***********************
+# EVENTO ON_READY
+# ***********************
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
 
-# ----------------------------
-# Interacción en lenguaje natural
-# ----------------------------
+# ***********************
+# INTERACCIÓN EN LENGUAJE NATURAL (abierto para todos)
+# ***********************
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -180,26 +255,24 @@ async def on_message(message):
     
     content = message.content.lower()
     
-    # Si el mensaje menciona "ranking", responde con el ranking actual
     if "ranking" in content:
         data = load_data()
-        sorted_players = sorted(data['participants'].items(), key=lambda item: item[1]['puntos'], reverse=True)
+        sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
         ranking_text = "🏅 Ranking Actual:\n"
         for idx, (user_id, player) in enumerate(sorted_players, 1):
             ranking_text += f"{idx}. {player['nombre']} - {player['puntos']} puntos\n"
         await message.channel.send(ranking_text)
         return
     
-    # Si el mensaje pide un chiste
     if "chiste" in content or "cuéntame un chiste" in content:
         await message.channel.send(random.choice(JOKES))
         return
     
     await bot.process_commands(message)
 
-# ----------------------------
-# Servidor Web para mantener el bot activo (útil para Render)
-# ----------------------------
+# ***********************
+# SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (Útil para hosting como Render)
+# ***********************
 app = Flask('')
 
 @app.route('/')
@@ -207,14 +280,13 @@ def home():
     return "El bot está funcionando!"
 
 def run_webserver():
-    port = int(os.environ.get("PORT", 8080))  # Usa el puerto asignado por Render o 8080 por defecto
+    port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# Iniciar el servidor web en un hilo separado
 thread = threading.Thread(target=run_webserver)
 thread.start()
 
-# ----------------------------
-# Iniciar el bot
-# ----------------------------
+# ***********************
+# INICIAR EL BOT
+# ***********************
 bot.run(os.getenv('DISCORD_TOKEN'))
