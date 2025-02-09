@@ -1,10 +1,19 @@
+import os
 import discord
 from discord.ext import commands
 from transformers import pipeline
 import random
 
+# Definir los permisos necesarios para el bot
 intents = discord.Intents.default()
 intents.members = True
+intents.messages = True
+intents.guilds = True
+intents.message_content = True  # Permite al bot leer el contenido de los mensajes
+
+# Obtener el token del bot y el ID del servidor desde las variables de entorno
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+GUILD_ID = os.getenv("GUILD_ID")
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 nlp = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
@@ -18,6 +27,11 @@ chistes = [
 @bot.event
 async def on_ready():
     print(f'Bot is ready. We have logged in as {bot.user}')
+    # Imprimir información del servidor si GUILD_ID está definido
+    if GUILD_ID:
+        guild = bot.get_guild(int(GUILD_ID))
+        if guild:
+            print(f'Bot conectado al servidor: {guild.name} (ID: {guild.id})')
 
 @bot.command()
 async def avanzar(ctx, *jugadores):
@@ -51,5 +65,4 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-bot.run('YOUR_DISCORD_BOT_TOKEN')
-
+bot.run(DISCORD_TOKEN)
