@@ -7,16 +7,16 @@ import os
 import threading
 from flask import Flask
 
-###########################
+##############################
 # CONFIGURACIÓN DEL PROPIETARIO Y CANALES
-###########################
-OWNER_ID = 1336609089656197171        # REEMPLAZA con tu Discord ID (como entero)
+##############################
+OWNER_ID = 1336609089656197171         # REEMPLAZA con tu Discord ID (entero)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # REEMPLAZA con el ID del canal privado (para comandos sensibles)
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # REEMPLAZA con el ID del canal público (donde se muestran resultados)
 
-###########################
-# CONEXIÓN A LA BASE DE DATOS SQLITE (opcional, se mantiene por compatibilidad)
-###########################
+##############################
+# CONEXIÓN A LA BASE DE DATOS SQLITE (para el torneo; opcional)
+##############################
 conn = sqlite3.connect('tournament.db')
 cursor = conn.cursor()
 cursor.execute('''
@@ -28,16 +28,16 @@ cursor.execute('''
 ''')
 conn.commit()
 
-###########################
-# CONFIGURACIÓN INICIAL
-###########################
+##############################
+# CONFIGURACIÓN INICIAL DEL TORNEO
+##############################
 PREFIX = '!'
 STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Etapa: jugadores que avanzan
 current_stage = 1
 
-###########################
-# SISTEMA DE ALMACENAMIENTO (JSON)
-###########################
+##############################
+# SISTEMA DE ALMACENAMIENTO (JSON) PARA EL TORNEO
+##############################
 def save_data(data):
     with open('tournament_data.json', 'w') as f:
         json.dump(data, f)
@@ -49,9 +49,9 @@ def load_data():
     except FileNotFoundError:
         return {"participants": {}}
 
-###########################
-# CHISTES – 70 originales + 50 nuevos = 120 chistes
-###########################
+##############################
+# CHISTES – 120 chistes (70 originales + 50 nuevos)
+##############################
 ALL_JOKES = [
     # --- 70 chistes originales ---
     "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
@@ -188,38 +188,32 @@ def get_random_joke():
     unused_jokes.remove(joke)
     return joke
 
-###########################
-# FUNCIONES DE LOGROS Y ACTUALIZACIÓN DE PUNTOS (para recompensar en juegos)
-###########################
-def award_points(user: discord.Member, points: int):
+##############################
+# FUNCIÓN PARA OTORGAR RECOMPENSAS SIMBÓLICAS (ESTRELLAS)
+##############################
+def award_symbolic_reward(user: discord.Member, reward: int):
     data = load_data()
     user_id = str(user.id)
     if user_id not in data['participants']:
         data['participants'][user_id] = {
             'nombre': user.display_name,
-            'puntos': 0,
+            'puntos': 0,          # Puntaje del torneo (se mantiene separado)
+            'symbolic': 0,        # Estrellas simbólicas ganadas en juegos de entretenimiento
             'etapa': current_stage,
             'logros': []
         }
     else:
-        if 'logros' not in data['participants'][user_id]:
-            data['participants'][user_id]['logros'] = []
-    current_points = int(data['participants'][user_id].get('puntos', 0))
-    new_points = current_points + points
-    data['participants'][user_id]['puntos'] = new_points
-    # Verificar logros
-    achievements_thresholds = [50, 100, 200, 500]
-    new_achievements = []
-    for threshold in achievements_thresholds:
-        if new_points >= threshold and threshold not in data['participants'][user_id]['logros']:
-            data['participants'][user_id]['logros'].append(threshold)
-            new_achievements.append(threshold)
+        if 'symbolic' not in data['participants'][user_id]:
+            data['participants'][user_id]['symbolic'] = 0
+    current_symbolic = int(data['participants'][user_id].get('symbolic', 0))
+    new_symbolic = current_symbolic + reward
+    data['participants'][user_id]['symbolic'] = new_symbolic
     save_data(data)
-    return new_points, new_achievements
+    return new_symbolic
 
-###########################
+##############################
 # VARIABLES PARA ESTADOS DE JUEGOS NATURALES
-###########################
+##############################
 active_trivia = {}  # key: channel.id, value: { "question": ..., "answer": ... }
 
 trivia_questions = [
@@ -256,9 +250,9 @@ predicciones = [
     "Confía en tus instintos, el camino correcto se te mostrará."
 ]
 
-###########################
+##############################
 # INICIALIZACIÓN DEL BOT
-###########################
+##############################
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
@@ -272,9 +266,10 @@ async def send_public_message(message: str):
     else:
         print("No se pudo encontrar el canal público.")
 
-###########################
-# COMANDOS DEL SISTEMA DE PUNTOS (con “!”, solo el propietario y desde canal privado)
-###########################
+##############################
+# COMANDOS DEL SISTEMA DE PUNTOS (con “!” – Solo el Propietario en canal privado)
+# (Estos afectan el puntaje del torneo, NO las recompensas simbólicas)
+##############################
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: discord.Member, puntos: int):
     if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
@@ -326,7 +321,7 @@ async def ver_puntuacion(ctx):
     data = load_data()
     user_id = str(ctx.author.id)
     if user_id in data['participants']:
-        await ctx.send(f"🏆 Tu puntuación actual es: {data['participants'][user_id]['puntos']}")
+        await ctx.send(f"🏆 Tu puntaje del torneo es: {data['participants'][user_id]['puntos']}")
     else:
         await ctx.send("❌ No estás registrado en el torneo")
 
@@ -334,7 +329,7 @@ async def ver_puntuacion(ctx):
 async def clasificacion(ctx):
     data = load_data()
     sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
-    ranking = "🏅 Clasificación Actual:\n"
+    ranking = "🏅 Clasificación del Torneo:\n"
     for idx, (uid, player) in enumerate(sorted_players, 1):
         ranking += f"{idx}. {player['nombre']} - {player['puntos']} puntos\n"
     await ctx.send(ranking)
@@ -419,9 +414,9 @@ async def configurar_etapa(ctx, etapa: int):
 async def chiste(ctx):
     await ctx.send(get_random_joke())
 
-###########################
-# INTERACCIÓN EN LENGUAJE NATURAL (SIN “!”)
-###########################
+##############################
+# INTERACCIÓN EN LENGUAJE NATURAL (sin “!”)
+##############################
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -429,20 +424,20 @@ async def on_message(message):
 
     content = message.content.lower().strip()
 
-    # COMANDO DE AYUDA: "comandos" o "lista de comandos"
+    # AYUDA: "comandos" o "lista de comandos"
     if content in ["comandos", "lista de comandos"]:
         help_text = (
             "**Resumen de Comandos:**\n\n"
             "• **Lenguaje Natural:**\n"
-            "   - **ranking:** Muestra tu posición y puntos.\n"
-            "   - **topmejores:** Muestra los 10 jugadores con mayor puntaje.\n"
-            "   - **chiste** o **cuéntame un chiste:** Te devuelve un chiste aleatorio.\n"
-            "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia.\n"
+            "   - **ranking:** Muestra tu posición y puntaje del torneo.\n"
+            "   - **topmejores:** Muestra el ranking de los 10 jugadores con mayor puntaje del torneo.\n"
+            "   - **chiste** o **cuéntame un chiste:** Te devuelve un chiste aleatorio (sin repetición hasta agotar la lista).\n"
+            "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia; si respondes correctamente, ganas 1 estrella simbólica.\n"
             "   - **oráculo** o **predicción:** Recibe una predicción divertida.\n"
             "   - **meme** o **muéstrame un meme:** Te muestra un meme aleatorio.\n"
-            "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras.\n"
-            "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes entre tú y otro usuario.\n\n"
-            "• **Comandos Sensibles (con '!') – Solo el Propietario en canal privado:**\n"
+            "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras; si ganas, ganas 1 estrella simbólica.\n"
+            "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes entre tú y otro usuario; el ganador gana 1 estrella simbólica.\n\n"
+            "• **Comandos Sensibles (con '!') – Solo el Propietario en canal privado (afectan el puntaje del torneo):**\n"
             "   - **!actualizar_puntuacion @usuario [puntos]**\n"
             "   - **!reducir_puntuacion @usuario [puntos]**\n"
             "   - **!avanzar_etapa**\n"
@@ -463,12 +458,9 @@ async def on_message(message):
     # Si hay una trivia activa en este canal, verifica la respuesta
     if message.channel.id in active_trivia:
         trivia = active_trivia[message.channel.id]
-        # Compara respuestas ignorando mayúsculas y espacios extra
         if message.content.lower().strip() == trivia['answer'].lower():
-            points_awarded, achievements = award_points(message.author, 10)
-            response = f"🎉 ¡Correcto, {message.author.display_name}! Has ganado 10 puntos. Ahora tienes {points_awarded} puntos."
-            if achievements:
-                response += "\n🏆 ¡Nuevo logro desbloqueado: " + ", ".join(str(a) for a in achievements) + " puntos!"
+            symbolic = award_symbolic_reward(message.author, 1)
+            response = f"🎉 ¡Correcto, {message.author.display_name}! Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
             await message.channel.send(response)
             del active_trivia[message.channel.id]
             return
@@ -485,17 +477,14 @@ async def on_message(message):
             await message.channel.send("¿Cuál eliges? Por favor indica piedra, papel o tijeras en tu mensaje.")
             return
         bot_choice = random.choice(opciones)
-        # Determinar resultado
         if user_choice == bot_choice:
             result = "¡Empate!"
         elif (user_choice == "piedra" and bot_choice == "tijeras") or \
              (user_choice == "papel" and bot_choice == "piedra") or \
              (user_choice == "tijeras" and bot_choice == "papel"):
             result = f"¡Ganaste! Yo elegí **{bot_choice}**."
-            new_total, achievements = award_points(message.author, 5)
-            result += f" Has ganado 5 puntos y ahora tienes {new_total} puntos."
-            if achievements:
-                result += "\n🏆 ¡Nuevo logro: " + ", ".join(str(a) for a in achievements) + " puntos!"
+            symbolic = award_symbolic_reward(message.author, 1)
+            result += f" Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
         else:
             result = f"Perdiste. Yo elegí **{bot_choice}**. ¡Inténtalo de nuevo!"
         await message.channel.send(result)
@@ -514,10 +503,8 @@ async def on_message(message):
                 f"{opponent.display_name} dice: {joke_opponent}\n"
             )
             winner = random.choice([challenger, opponent])
-            new_total, achievements = award_points(winner, 5)
-            duel_text += f"🎉 ¡El ganador es {winner.display_name}! Ha ganado 5 puntos y ahora tiene {new_total} puntos."
-            if achievements:
-                duel_text += "\n🏆 ¡Nuevo logro: " + ", ".join(str(a) for a in achievements) + " puntos!"
+            symbolic = award_symbolic_reward(winner, 1)
+            duel_text += f"🎉 ¡El ganador es {winner.display_name}! Ha ganado 1 estrella simbólica. Ahora tiene {symbolic} estrellas simbólicas."
             await message.channel.send(duel_text)
             return
 
@@ -537,7 +524,7 @@ async def on_message(message):
     if "topmejores" in content:
         data = load_data()
         sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
-        ranking_text = "🏅 **Top 10 Mejores:**\n"
+        ranking_text = "🏅 **Top 10 Mejores del Torneo:**\n"
         for idx, (uid, player) in enumerate(sorted_players[:10], 1):
             ranking_text += f"{idx}. {player['nombre']} - {player['puntos']} puntos\n"
         await message.channel.send(ranking_text)
@@ -556,7 +543,7 @@ async def on_message(message):
                 found = True
                 break
         if found:
-            await message.channel.send(f"🏆 {message.author.display_name}, tu ranking es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id]['puntos']} puntos.")
+            await message.channel.send(f"🏆 {message.author.display_name}, tu ranking es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id]['puntos']} puntos en el torneo.")
         else:
             await message.channel.send("❌ No estás registrado en el torneo.")
         return
@@ -568,16 +555,16 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-###########################
+##############################
 # EVENTO ON_READY
-###########################
+##############################
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
 
-###########################
+##############################
 # SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (Útil para hosting como Render)
-###########################
+##############################
 app = Flask('')
 
 @app.route('/')
@@ -591,7 +578,7 @@ def run_webserver():
 thread = threading.Thread(target=run_webserver)
 thread.start()
 
-###########################
+##############################
 # INICIAR EL BOT
-###########################
+##############################
 bot.run(os.getenv('DISCORD_TOKEN'))
