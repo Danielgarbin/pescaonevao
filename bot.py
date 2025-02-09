@@ -2,14 +2,17 @@ import os
 import discord
 from discord.ext import commands
 import random
+from keep_alive import keep_alive  # Importar el script keep_alive
 
+keep_alive()  # Llamar a la función keep_alive
+
+# Definir los permisos necesarios para el bot
 intents = discord.Intents.default()
 intents.members = True
 intents.messages = True
 intents.guilds = True
-intents.message_content = True  # Permite al bot leer el contenido de los mensajes
+intents.message_content = True
 
-# Obtener el token del bot y el ID del servidor desde las variables de entorno
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
 
