@@ -19,7 +19,7 @@ cursor.execute('''
 conn.commit()
 
 # Configuración inicial
-TOKEN = 'TU_TOKEN_DEL_BOT'
+TOKEN = 'DISCORD_TOKEN'
 PREFIX = '!'
 STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Etapa: jugadores que avanzan
 current_stage = 1
