@@ -15,11 +15,11 @@ from flask import Flask
 OWNER_ID = 1336609089656197171         # Tu Discord ID (como entero)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # ID del canal privado (para comandos sensibles)
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público (donde se muestran resultados)
+GUILD_ID = 1337387112403697694            # REEMPLAZA con el ID de tu servidor (guild)
 
 ##############################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
 ##############################
-# Render inyecta la variable de entorno DATABASE_URL (usa la Internal Database URL)
 DATABASE_URL = os.environ.get("DATABASE_URL")
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
@@ -351,24 +351,30 @@ async def send_public_message(message: str):
 ##############################
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
+    # Este comando debe ejecutarse en el canal privado configurado
     if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
             pass
         return
-    # Extraer el ID numérico usando regex
+    # Extraer el ID numérico (soporte para mención o ID simple)
     match = re.search(r'\d+', jugador)
     if not match:
-        await send_public_message("No se pudo encontrar al miembro.")
+        await send_public_message("No se pudo encontrar el miembro.")
         return
     member_id = int(match.group())
+    # Usar ctx.guild si existe, o forzar el servidor mediante GUILD_ID
+    guild = ctx.guild or bot.get_guild(GUILD_ID)
+    if guild is None:
+        await send_public_message("No se pudo determinar el servidor.")
+        return
     try:
-        member = ctx.guild.get_member(member_id)
+        member = guild.get_member(member_id)
         if member is None:
-            member = await ctx.guild.fetch_member(member_id)
+            member = await guild.fetch_member(member_id)
     except Exception as e:
-        await send_public_message("No se pudo encontrar al miembro.")
+        await send_public_message("No se pudo encontrar al miembro en el servidor.")
         return
     try:
         puntos = int(puntos)
@@ -376,6 +382,7 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
         await send_public_message("Por favor, proporciona un número válido de puntos.")
         return
     new_points = update_score(member, puntos)
+    # Enviar el resultado al canal público (para que los demás lo vean)
     await send_public_message(f"✅ Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos")
     try:
         await ctx.message.delete()
@@ -431,9 +438,7 @@ async def avanzar_etapa(ctx):
         player["etapa"] = current_stage
         upsert_participant(uid, player)
         try:
-            member = ctx.guild.get_member(int(uid))
-            if member is None:
-                member = await ctx.guild.fetch_member(int(uid))
+            member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
             await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
@@ -456,12 +461,14 @@ async def eliminar_jugador(ctx, jugador: str):
         await send_public_message("No se pudo encontrar al miembro.")
         return
     member_id = int(match.group())
+    guild = ctx.guild or bot.get_guild(GUILD_ID)
+    if guild is None:
+        await send_public_message("No se pudo determinar el servidor.")
+        return
     try:
-        member = ctx.guild.get_member(member_id)
-        if member is None:
-            member = await ctx.guild.fetch_member(member_id)
+        member = guild.get_member(member_id) or await guild.fetch_member(member_id)
     except Exception as e:
-        await send_public_message("No se pudo encontrar al miembro.")
+        await send_public_message("No se pudo encontrar al miembro en el servidor.")
         return
     user_id = str(member.id)
     with conn.cursor() as cur:
