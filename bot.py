@@ -1,7 +1,6 @@
 import os
 import discord
 from discord.ext import commands
-from transformers import pipeline
 import random
 
 # Definir los permisos necesarios para el bot
@@ -16,13 +15,15 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-nlp = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
 
 chistes = [
     "¿Por qué los pájaros no usan Facebook? Porque ya tienen Twitter.",
     "¿Cuál es el pez más divertido? El pez payaso.",
     "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!"
 ]
+
+# Base de datos simple en memoria para almacenar puntuaciones
+puntuaciones = {}
 
 @bot.event
 async def on_ready():
@@ -42,6 +43,27 @@ async def avanzar(ctx, *jugadores):
 async def eliminar(ctx, jugador):
     await ctx.author.send(f'Has sido eliminado, {jugador}')
 
+@bot.command()
+async def puntuacion(ctx, jugador: str, puntos: int):
+    if jugador in puntuaciones:
+        puntuaciones[jugador] += puntos
+    else:
+        puntuaciones[jugador] = puntos
+    await ctx.send(f'Puntuación actualizada para {jugador}: {puntuaciones[jugador]} puntos')
+
+@bot.command()
+async def mi_clasificacion(ctx):
+    jugador = ctx.author.name
+    if jugador in puntuaciones:
+        await ctx.send(f'{jugador}, tu puntuación es {puntuaciones[jugador]} puntos')
+    else:
+        await ctx.send(f'{jugador}, aún no tienes puntuaciones registradas')
+
+@bot.command()
+async def chiste(ctx):
+    await ctx.send(random.choice(chistes))
+
+# Preguntar clasificación
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
@@ -50,19 +72,13 @@ async def on_message(message):
     if "chiste" in message.content.lower():
         await message.channel.send(random.choice(chistes))
     
-    # Preguntar clasificación
-    if "mi clasificación" in message.content.lower():
+    if "mi top" in message.content.lower():  # Cambio solicitado
         jugador = message.author.name
-        # Aquí se agregaría la lógica para obtener la clasificación del jugador
-        await message.channel.send(f'{jugador}, tu clasificación es...')
+        if jugador in puntuaciones:
+            await message.channel.send(f'{jugador}, tu puntuación es {puntuaciones[jugador]} puntos')
+        else:
+            await message.channel.send(f'{jugador}, aún no tienes puntuaciones registradas')
     
-    # Responder preguntas en lenguaje natural
-    if bot.user.mentioned_in(message):
-        context = "Contexto relevante sobre el torneo o los jugadores"
-        question = message.content.replace(f'<@!{bot.user.id}>', '').strip()
-        response = nlp(question=question, context=context)
-        await message.channel.send(response['answer'])
-
     await bot.process_commands(message)
 
 bot.run(DISCORD_TOKEN)
