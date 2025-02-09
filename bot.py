@@ -357,12 +357,11 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
             pass
         return
     try:
-        # Si el argumento es una mención, extraer el ID
-        if jugador.startswith("<@") and jugador.endswith(">"):
-            id_str = jugador.strip("<@!>")
-        else:
-            id_str = jugador
-        member = await ctx.guild.fetch_member(int(id_str))
+        # Extraer el ID del usuario (soporta mención o ID simple)
+        id_str = jugador.strip("<@!>")
+        member = ctx.guild.get_member(int(id_str))
+        if member is None:
+            member = await ctx.guild.fetch_member(int(id_str))
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro.")
         return
@@ -446,11 +445,10 @@ async def eliminar_jugador(ctx, jugador: str):
             pass
         return
     try:
-        if jugador.startswith("<@") and jugador.endswith(">"):
-            id_str = jugador.strip("<@!>")
-        else:
-            id_str = jugador
-        member = await ctx.guild.fetch_member(int(id_str))
+        id_str = jugador.strip("<@!>")
+        member = ctx.guild.get_member(int(id_str))
+        if member is None:
+            member = await ctx.guild.fetch_member(int(id_str))
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro.")
         return
