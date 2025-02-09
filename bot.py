@@ -18,7 +18,7 @@ PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público (donde se mues
 ##############################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
 ##############################
-# Render inyecta la variable de entorno DATABASE_URL (usar la Internal Database URL)
+# Render inyecta la variable de entorno DATABASE_URL (usa la Internal Database URL)
 DATABASE_URL = os.environ.get("DATABASE_URL")
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
@@ -115,7 +115,7 @@ def award_symbolic_reward(user: discord.Member, reward: int):
     return new_symbolic
 
 ##############################
-# CHISTES: 170 chistes (120 previos + 50 nuevos)
+# CHISTES: 170 chistes (120 previos + 50 nuevos extra)
 ##############################
 ALL_JOKES = [
     # --- 70 chistes originales ---
@@ -190,7 +190,7 @@ ALL_JOKES = [
     "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
     "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma.",
 
-    # --- 50 chistes nuevos (adicionales) ya existentes (antes tenías 50 extras)
+    # --- 50 chistes nuevos (adicionales ya existentes, 50 extra) ---
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones.",
     "¿Por qué la bicicleta no se siente sola? Porque siempre tiene dos ruedas.",
@@ -236,8 +236,7 @@ ALL_JOKES = [
     "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
     "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
     "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
-
-    # --- 50 chistes nuevos (extra, los mejores que jamás he creado) ---
+    # --- 50 chistes nuevos (los mejores que jamás he creado) ---
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo.",
     "¿Qué hace un pez en el ordenador? Nada en la red.",
     "¿Por qué los fantasmas no pueden mentir? Porque se les ve a través.",
@@ -278,7 +277,6 @@ ALL_JOKES = [
     "¿Qué hace un boomerang cuando se cansa? Se queda en pausa y vuelve a su punto."
 ]
 
-# Función para obtener un chiste aleatorio sin repetir hasta agotar la lista
 unused_jokes = ALL_JOKES.copy()
 def get_random_joke():
     global unused_jokes, ALL_JOKES
@@ -334,6 +332,7 @@ predicciones = [
 # INICIALIZACIÓN DEL BOT
 ##############################
 intents = discord.Intents.default()
+intents.members = True  # Habilitamos el intent para miembros para poder resolver menciones de usuarios
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
