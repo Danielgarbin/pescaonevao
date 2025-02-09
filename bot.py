@@ -753,7 +753,7 @@ async def on_ready():
 # Aquí ya se creó el objeto "app" y los endpoints.
 def run_webserver():
     port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 thread = threading.Thread(target=run_webserver)
 thread.start()
