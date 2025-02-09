@@ -19,8 +19,7 @@ PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público (donde se mues
 ##############################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
 ##############################
-# Render inyecta la variable de entorno DATABASE_URL (usa la Internal Database URL)
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("DATABASE_URL")  # Asegúrate de configurar esta variable en Render con la Internal Database URL
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
@@ -190,7 +189,7 @@ ALL_JOKES = [
     "¿Qué le dijo una estrella a otra? Brilla, que brillas.",
     "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
     "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma.",
-
+    
     # --- 50 chistes nuevos (adicionales ya existentes, 50 extra) ---
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones.",
@@ -237,7 +236,7 @@ ALL_JOKES = [
     "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
     "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
     "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
-
+    
     # --- 50 chistes nuevos (los mejores que jamás he creado) ---
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo.",
     "¿Qué hace un pez en el ordenador? Nada en la red.",
@@ -334,7 +333,7 @@ predicciones = [
 # INICIALIZACIÓN DEL BOT
 ##############################
 intents = discord.Intents.default()
-intents.members = True  # Permite obtener información de todos los miembros del servidor
+intents.members = True  # Habilitamos el intent de miembros para poder buscar usuarios no presentes en el canal
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
@@ -351,19 +350,25 @@ async def send_public_message(message: str):
 ##############################
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
-    # Permitir que se use la mención o ID de usuario
     if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
             pass
         return
+    # Intentar convertir la cadena a miembro mediante MemberConverter
     converter = MemberConverter()
     try:
         member = await converter.convert(ctx, jugador)
     except Exception as e:
-        await send_public_message("No se pudo encontrar al miembro.")
-        return
+        # Si falla, intentar extraer el ID de la mención y buscar el miembro
+        try:
+            # Remover caracteres de mención (<@! ... >)
+            id_str = jugador.strip("<@!>")
+            member = await ctx.guild.fetch_member(int(id_str))
+        except Exception as e:
+            await send_public_message("No se pudo encontrar al miembro.")
+            return
     try:
         puntos = int(puntos)
     except ValueError:
@@ -447,8 +452,12 @@ async def eliminar_jugador(ctx, jugador: str):
     try:
         member = await converter.convert(ctx, jugador)
     except Exception as e:
-        await send_public_message("No se pudo encontrar al miembro.")
-        return
+        try:
+            id_str = jugador.strip("<@!>")
+            member = await ctx.guild.fetch_member(int(id_str))
+        except Exception as e:
+            await send_public_message("No se pudo encontrar al miembro.")
+            return
     user_id = str(member.id)
     with conn.cursor() as cur:
         cur.execute("DELETE FROM participants WHERE id = %s", (user_id,))
