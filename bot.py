@@ -13,7 +13,7 @@ from flask import Flask
 # CONFIGURACIÓN: IDs y Servidor
 ######################################
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
-CHANNEL_ID = 1338126297666424874         # Canal en el que se publican resultados y se ejecutan los comandos
+CHANNEL_ID = 1338126297666424874         # Canal donde se publican los resultados y se ejecutan los comandos
 GUILD_ID = 1337387112403697694            # ID de tu servidor (guild)
 
 ######################################
@@ -41,13 +41,13 @@ init_db()
 ######################################
 # CONFIGURACIÓN DEL TORNEO: Etapas y Nombres
 ######################################
-STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}  # Máx. jugadores que avanzan en cada etapa
+STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}  # Máximo de jugadores que avanzan en cada etapa
 stage_names = {
     1: "Battle Royale",
     2: "Snipers vs Runners",
     3: "Boxfight duos",
     4: "Pescadito dice",
-    5: "Gran Final"  # Nombre modificado
+    5: "Gran Final"
 }
 current_stage = 1  # Etapa inicial
 
@@ -128,10 +128,8 @@ def award_symbolic_reward(user: discord.Member, reward: int):
 ######################################
 # CHISTES (170 chistes)
 ######################################
-# Inserta aquí la lista completa de tus 170 chistes.
-ALL_JOKES = [
-    "Chiste 1", "Chiste 2", "Chiste 3", "...", "Chiste 170"
-]
+# Generamos la lista de 170 chistes (puedes reemplazar estos con tus chistes reales)
+ALL_JOKES = [f"Chiste {i}" for i in range(1, 171)]
 unused_jokes = ALL_JOKES.copy()
 def get_random_joke():
     global unused_jokes, ALL_JOKES
@@ -182,7 +180,7 @@ predicciones = [
 # INICIALIZACIÓN DEL BOT
 ######################################
 intents = discord.Intents.default()
-intents.members = True
+intents.members = True   # Para acceder a todos los miembros del servidor
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -334,18 +332,23 @@ async def regresar_etapa(ctx):
         pass
 
 ######################################
-# COMANDOS DE LENGUAJE NATURAL (Sin "!")
+# EVENTO ON_MESSAGE: Procesa comandos de lenguaje natural
 ######################################
 @bot.event
 async def on_message(message):
-    # Si el mensaje comienza con "!" y el autor no es el propietario, lo borra sin respuesta.
+    # Si el mensaje comienza con "!" y el autor no es el propietario, se borra sin respuesta.
     if message.content.startswith("!") and message.author.id != OWNER_ID:
         try:
             await message.delete()
         except:
             pass
         return
+    # Si el mensaje comienza con "!" y es del propietario, lo dejamos que se procese como comando
+    if message.content.startswith("!") and message.author.id == OWNER_ID:
+        await bot.process_commands(message)
+        return
 
+    # Procesa mensajes que NO comienzan con "!" (comandos de lenguaje natural)
     if message.author.bot:
         return
     content = message.content.strip().lower()
@@ -390,6 +393,7 @@ async def on_message(message):
         )
         await message.channel.send(help_text)
         return
+    # Eliminamos el comando "chiste" duplicado: lo manejamos aquí en lenguaje natural
     if content in ["chiste", "cuéntame un chiste"]:
         await message.channel.send(get_random_joke())
         return
@@ -460,7 +464,7 @@ async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
 
 ######################################
-# SERVIDOR WEB MÍNIMO (Para que Render detecte un puerto abierto)
+# SERVIDOR WEB MÍNIMO (para que Render detecte un puerto abierto)
 ######################################
 app = Flask(__name__)
 
@@ -470,10 +474,9 @@ def home():
 
 def run_webserver():
     port = int(os.environ.get("PORT", 8080))
-    # Aseguramos que Flask se ejecute sin reloader y en modo producción
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
-# Inicia el servidor Flask en un hilo separado
+# Inicia el servidor Flask en un hilo separado.
 threading.Thread(target=run_webserver).start()
 
 ######################################
