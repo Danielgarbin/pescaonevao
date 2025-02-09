@@ -41,7 +41,7 @@ init_db()
 ######################################
 # CONFIGURACIÓN DEL TORNEO: Etapas y Nombres
 ######################################
-STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}  # Cantidad máxima de jugadores que avanzan en cada etapa
+STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}  # Máx. jugadores que avanzan en cada etapa
 stage_names = {
     1: "Battle Royale",
     2: "Snipers vs Runners",
@@ -49,7 +49,7 @@ stage_names = {
     4: "Pescadito dice",
     5: "Gran Final"  # Nombre modificado
 }
-current_stage = 1  # Comenzamos en etapa 1
+current_stage = 1  # Etapa inicial
 
 ######################################
 # FUNCIONES PARA LA BASE DE DATOS
@@ -182,7 +182,7 @@ predicciones = [
 # INICIALIZACIÓN DEL BOT
 ######################################
 intents = discord.Intents.default()
-intents.members = True  # Para acceder a todos los miembros del servidor
+intents.members = True
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -338,7 +338,7 @@ async def regresar_etapa(ctx):
 ######################################
 @bot.event
 async def on_message(message):
-    # Si el mensaje comienza con "!" y el autor no es el propietario, se borra sin respuesta
+    # Si el mensaje comienza con "!" y el autor no es el propietario, lo borra sin respuesta.
     if message.content.startswith("!") and message.author.id != OWNER_ID:
         try:
             await message.delete()
@@ -458,6 +458,23 @@ async def on_message(message):
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
+
+######################################
+# SERVIDOR WEB MÍNIMO (Para que Render detecte un puerto abierto)
+######################################
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "El bot está funcionando!"
+
+def run_webserver():
+    port = int(os.environ.get("PORT", 8080))
+    # Aseguramos que Flask se ejecute sin reloader y en modo producción
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+# Inicia el servidor Flask en un hilo separado
+threading.Thread(target=run_webserver).start()
 
 ######################################
 # INICIAR EL BOT
