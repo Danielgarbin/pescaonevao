@@ -52,6 +52,93 @@ def load_data():
         return {"participants": {}}
 
 # ***********************
+# CONFIGURACIÓN DE CHISTES
+# ***********************
+ALL_JOKES = [
+    "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
+    "¿Por qué los pájaros no usan Facebook? Porque ya tienen Twitter.",
+    "¿Qué le dijo un semáforo a otro? No me mires, me estoy cambiando.",
+    "¿Por qué el libro de matemáticas se sentía triste? Porque tenía demasiados problemas.",
+    "¿Qué hace una taza en la escuela? Toma té.",
+    "¿Cómo se despiden los químicos? Ácido un placer.",
+    "¿Qué le dijo la pared al cuadro? ¡Qué arte tienes!",
+    "¿Cuál es el animal más antiguo? La cebra, porque está en blanco y negro.",
+    "¿Por qué los esqueletos no pelean entre ellos? Porque no tienen agallas.",
+    "¿Qué le dijo un pez a otro? Nada, nada.",
+    "¿Cómo se llama el campeón de buceo japonés? Tokofondo. ¿Y el subcampeón? Kasitoko.",
+    "¿Qué hace un pollo en un ascensor? ¡Pío, pío, sube!",
+    "¿Cuál es el colmo de un jardinero? Que siempre lo dejen plantado.",
+    "¿Qué le dice una iguana a su hermana gemela? Somos iguanitas.",
+    "¿Qué hace un león con una cuchara? ¡Cuchichea!",
+    "¿Por qué la escoba está feliz? Porque está barriendo.",
+    "¿Qué le dijo el cero al ocho? ¡Bonito cinturón!",
+    "¿Por qué la gallina se sentó en el reloj? Porque quería poner el tiempo en orden.",
+    "¿Qué hace un pez payaso? Nada, solo hace chistes.",
+    "¿Por qué los programadores confunden Halloween y Navidad? Porque OCT 31 es igual a DEC 25.",
+    "¿Cómo se llama un perro sin patas? No importa, no va a venir.",
+    "¿Qué hace una oreja en el cine? Escucha la película.",
+    "¿Cuál es el colmo de un electricista? No poder cambiar su vida.",
+    "¿Qué le dijo una bombilla a otra? ¡Nos vemos en el enchufe!",
+    "¿Qué le dice una impresora a otra? ¿Esa hoja es tuya o es una impresión mía?",
+    "¿Por qué no se pelean los números? Porque siempre se suman.",
+    "¿Qué hace un pez en una biblioteca? Nada, porque se le escapan los libros.",
+    "¿Cuál es el colmo de un músico? Que lo dejen en silencio.",
+    "¿Qué hace una planta en una fiesta? Se riega de alegría.",
+    "¿Cómo se dice 'hospital' en inglés? ¡Hopital, hop, hop!",
+    "¿Qué le dijo el tomate a la cebolla? No llores, que te veo venir.",
+    "¿Por qué la bicicleta no se para sola? Porque está dos-tirada.",
+    "¿Qué le dice un caracol a otro? ¡Vamos despacio!",
+    "¿Qué le dijo el sol a la luna? ¡Te veo en la noche!",
+    "¿Cuál es el colmo de un panadero? Que siempre se le queme el pan.",
+    "¿Por qué el perro lleva reloj? Porque quiere ser puntual.",
+    "¿Qué hace una serpiente en un concierto? ¡Sssintonia!",
+    "¿Por qué el elefante no usa ordenador? Porque le tiene miedo al ratón.",
+    "¿Qué le dice un plátano a una gelatina? ¡No tiemblo por ti!",
+    "¿Cómo se dice pelo en francés? 'Cheveu', pero no sé si me lo crees.",
+    "¿Qué hace una vaca en un terremoto? ¡Muuuuu-vemento!",
+    "¿Por qué el cartero se fue de vacaciones? Porque necesitaba un cambio de dirección.",
+    "¿Qué le dijo una calculadora a otra? ¡Tienes muchos números!",
+    "¿Por qué el ciego no puede ser DJ? Porque no encuentra el disco.",
+    "¿Qué hace un robot en la playa? Recoge arena en sus circuitos.",
+    "¿Por qué las focas miran siempre hacia arriba? ¡Porque ahí están los focos!",
+    "¿Qué hace una galleta en el hospital? Se desmorona.",
+    "¿Por qué los pájaros no usan el ascensor? Porque ya tienen alas.",
+    "¿Qué le dijo una taza a otra? ¡Qué té tan bueno!",
+    "¿Por qué el helado se derrite? Porque no soporta el calor.",
+    "¿Qué hace una vaca en el espacio? ¡Muuuuuu, en gravedad cero!",
+    "¿Cuál es el colmo de un astronauta? Que siempre se sienta fuera de este mundo.",
+    "¿Qué le dijo una impresora 3D a otra? Te imprimo mi amistad.",
+    "¿Por qué los vampiros no pueden jugar al fútbol? Porque siempre pierden la sangre en la cancha.",
+    "¿Qué hace una araña en internet? Teje la web.",
+    "¿Por qué la luna fue al médico? Porque se sentía en cuarto menguante.",
+    "¿Qué hace un globo en una fiesta? Se infla de felicidad.",
+    "¿Qué le dice un gusano a otro? Voy a dar una vuelta a la manzana.",
+    "¿Por qué las ardillas no usan celular? Porque ya tienen su propia cola.",
+    "¿Qué hace una sombra en la oscuridad? Se esconde.",
+    "¿Por qué el sol nunca se pone? Porque siempre brilla.",
+    "¿Qué hace una llave en un cajón? Abre puertas a la imaginación.",
+    "¿Por qué los relojes son malos contando chistes? Porque siempre dan la hora.",
+    "¿Qué le dice un diente a otro? ¡Nos vemos en la muela!",
+    "¿Por qué la computadora fue al médico? Porque tenía un virus.",
+    "¿Qué hace una escalera en un edificio? Eleva la diversión.",
+    "¿Por qué el viento es buen amigo? Porque siempre sopla contigo.",
+    "¿Qué le dijo una estrella a otra? Brilla, que brillas.",
+    "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
+    "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma."
+]
+
+# Lista auxiliar para controlar los chistes no repetidos
+unused_jokes = ALL_JOKES.copy()
+
+def get_random_joke():
+    global unused_jokes, ALL_JOKES
+    if not unused_jokes:
+        unused_jokes = ALL_JOKES.copy()
+    joke = random.choice(unused_jokes)
+    unused_jokes.remove(joke)
+    return joke
+
+# ***********************
 # INICIALIZACIÓN DEL BOT
 # ***********************
 intents = discord.Intents.default()
@@ -228,15 +315,9 @@ async def configurar_etapa(ctx, etapa: int):
 # ***********************
 # COMANDO DE ENTRETENIMIENTO (abierto para todos)
 # ***********************
-JOKES = [
-    "¿Qué hace un pez en el agua? ¡Nada!",
-    "¿Cómo se dice pañuelo en japonés? Saka-moko",
-    "¿Qué le dice un huevo a una sartén? Me tienes frito"
-]
-
 @bot.command()
 async def chiste(ctx):
-    await ctx.send(random.choice(JOKES))
+    await ctx.send(get_random_joke())
 
 # ***********************
 # EVENTO ON_READY
@@ -265,7 +346,7 @@ async def on_message(message):
         await message.channel.send(ranking_text)
         return
 
-    # Si se menciona "ranking", mostrar el ranking personal del usuario
+    # Si se menciona "ranking" (sin "topmejores"), mostrar el ranking personal del usuario
     elif "ranking" in content:
         data = load_data()
         sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
@@ -285,7 +366,7 @@ async def on_message(message):
 
     # Si se solicita un chiste
     if "chiste" in content or "cuéntame un chiste" in content:
-        await message.channel.send(random.choice(JOKES))
+        await message.channel.send(get_random_joke())
         return
 
     await bot.process_commands(message)
