@@ -9,21 +9,21 @@ import re
 import threading
 from flask import Flask, request, jsonify
 
-##############################
-# CONFIGURACIÓN DEL PROPIETARIO Y CANALES
-##############################
-OWNER_ID = 1336609089656197171         # Tu Discord ID (como entero)
+######################################
+# CONFIGURACIÓN: IDs y Servidor
+######################################
+OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # ID del canal privado (para comandos sensibles)
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público (donde se muestran resultados)
 GUILD_ID = 123456789012345678            # REEMPLAZA con el ID de tu servidor (guild)
 
-# API_SECRET se usará para autenticar la API privada
-API_SECRET = os.environ.get("API_SECRET")  # Configura esta variable en Render
+# API_SECRET se usará para autenticar la API privada (si la usas)
+API_SECRET = os.environ.get("API_SECRET")
 
-##############################
+######################################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
-##############################
-DATABASE_URL = os.environ.get("DATABASE_URL")  # Asegúrate de configurar esta variable en Render (usualmente la Internal Database URL)
+######################################
+DATABASE_URL = os.environ.get("DATABASE_URL")  # Configurada en Render (usualmente la Internal Database URL)
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
@@ -41,16 +41,16 @@ def init_db():
         """)
 init_db()
 
-##############################
+######################################
 # CONFIGURACIÓN INICIAL DEL TORNEO
-##############################
+######################################
 PREFIX = '!'
-STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Etapa: jugadores que avanzan
+STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Cantidad de jugadores que avanzan en cada etapa
 current_stage = 1
 
-##############################
+######################################
 # FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS
-##############################
+######################################
 def get_participant(user_id):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM participants WHERE id = %s", (user_id,))
@@ -118,11 +118,11 @@ def award_symbolic_reward(user: discord.Member, reward: int):
     upsert_participant(user_id, participant)
     return new_symbolic
 
-##############################
-# CHISTES: 170 chistes (120 previos + 50 nuevos extra)
-##############################
+######################################
+# CHISTES: 170 chistes (70 originales + 50 adicionales + 50 nuevos extra)
+######################################
 ALL_JOKES = [
-    # --- 70 chistes originales ---
+    # Bloque 1: 70 chistes originales
     "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
     "¿Por qué los pájaros no usan Facebook? Porque ya tienen Twitter.",
     "¿Qué le dijo un semáforo a otro? No me mires, me estoy cambiando.",
@@ -193,8 +193,8 @@ ALL_JOKES = [
     "¿Qué le dijo una estrella a otra? Brilla, que brillas.",
     "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
     "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma.",
-    
-    # --- 50 chistes nuevos (adicionales ya existentes, 50 extra) ---
+
+    # Bloque 2: 50 chistes adicionales
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones.",
     "¿Por qué la bicicleta no se siente sola? Porque siempre tiene dos ruedas.",
@@ -240,8 +240,8 @@ ALL_JOKES = [
     "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
     "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
     "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
-    
-    # --- 50 chistes nuevos (los mejores que jamás he creado) ---
+
+    # Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo.",
     "¿Qué hace un pez en el ordenador? Nada en la red.",
     "¿Por qué los fantasmas no pueden mentir? Porque se les ve a través.",
@@ -282,62 +282,11 @@ ALL_JOKES = [
     "¿Qué hace un boomerang cuando se cansa? Se queda en pausa y vuelve a su punto."
 ]
 
-unused_jokes = ALL_JOKES.copy()
-def get_random_joke():
-    global unused_jokes, ALL_JOKES
-    if not unused_jokes:
-        unused_jokes = ALL_JOKES.copy()
-    joke = random.choice(unused_jokes)
-    unused_jokes.remove(joke)
-    return joke
-
-##############################
-# VARIABLES PARA ESTADOS DE JUEGOS NATURALES
-##############################
-active_trivia = {}  # key: channel.id, value: { "question": ..., "answer": ... }
-
-##############################
-# OTRAS VARIABLES (Trivia, Memes, Predicciones)
-##############################
-trivia_questions = [
-    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas"},
-    {"question": "¿En qué año llegó el hombre a la Luna?", "answer": "1969"},
-    {"question": "¿Cuál es el planeta más cercano al Sol?", "answer": "mercurio"},
-    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez"},
-    {"question": "¿Cuál es el animal terrestre más rápido?", "answer": "guepardo"},
-    {"question": "¿Cuántos planetas hay en el sistema solar?", "answer": "8"},
-    {"question": "¿En qué continente se encuentra Egipto?", "answer": "áfrica"},
-    {"question": "¿Cuál es el idioma más hablado en el mundo?", "answer": "chino"},
-    {"question": "¿Qué instrumento mide la temperatura?", "answer": "termómetro"},
-    {"question": "¿Cuál es la capital de Francia?", "answer": "parís"}
-]
-
-MEMES = [
-    "https://i.imgflip.com/1bij.jpg",
-    "https://i.imgflip.com/26am.jpg",
-    "https://i.imgflip.com/30b1gx.jpg",
-    "https://i.imgflip.com/3si4.jpg",
-    "https://i.imgflip.com/2fm6x.jpg"
-]
-
-predicciones = [
-    "Hoy, las estrellas te favorecen... ¡pero recuerda usar protector solar!",
-    "El oráculo dice: el mejor momento para actuar es ahora, ¡sin miedo!",
-    "Tu destino es tan brillante que necesitarás gafas de sol.",
-    "El futuro es incierto, pero las risas están garantizadas.",
-    "Hoy encontrarás una sorpresa inesperada... ¡quizás un buen chiste!",
-    "El universo conspira a tu favor, ¡aprovéchalo!",
-    "Tu suerte cambiará muy pronto, y será motivo de celebración.",
-    "Las oportunidades se presentarán, solo debes estar listo para recibirlas.",
-    "El oráculo revela que una gran aventura te espera en el horizonte.",
-    "Confía en tus instintos, el camino correcto se te mostrará."
-]
-
-##############################
+######################################
 # INICIALIZACIÓN DEL BOT
-##############################
+######################################
 intents = discord.Intents.default()
-intents.members = True  # Para poder buscar miembros que no estén en el canal actual
+intents.members = True   # Para poder buscar miembros que no estén en el canal actual
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
@@ -349,9 +298,9 @@ async def send_public_message(message: str):
     else:
         print("No se pudo encontrar el canal público.")
 
-##############################
+######################################
 # ENDPOINTS DE LA API PRIVADA
-##############################
+######################################
 app = Flask(__name__)
 
 def check_auth(req):
@@ -426,9 +375,9 @@ def api_set_stage():
     bot.loop.create_task(send_public_message(f"✅ API: Etapa actual configurada a {stage}"))
     return jsonify({"message": "Etapa configurada", "stage": stage}), 200
 
-##############################
+######################################
 # COMANDOS SENSIBLES DE DISCORD (con “!” – Solo el Propietario en canal privado)
-##############################
+######################################
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
     if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
@@ -515,7 +464,7 @@ async def avanzar_etapa(ctx):
         upsert_participant(uid, player)
         try:
             member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
-            await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
+            await member.send(f"🎉 ¡Felicitaciones! Has avanzado a la etapa {current_stage}")
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
     await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron")
@@ -575,17 +524,56 @@ async def configurar_etapa(ctx, etapa: int):
 async def chiste(ctx):
     await ctx.send(get_random_joke())
 
-##############################
-# INTERACCIÓN EN LENGUAJE NATURAL (Sin “!”)
-##############################
+######################################
+# EVENTO ON_MESSAGE: Comandos de Lenguaje Natural
+######################################
 @bot.event
 async def on_message(message):
-    if message.author.bot:
+    # Si el mensaje comienza con "!" y el autor no es el propietario, se borra sin respuesta.
+    if message.content.startswith("!") and message.author.id != OWNER_ID:
+        try:
+            await message.delete()
+        except:
+            pass
         return
 
-    content = message.content.lower().strip()
+    # Si el mensaje comienza con "!" y es del propietario, se procesa como comando sensible.
+    if message.content.startswith("!") and message.author.id == OWNER_ID:
+        await bot.process_commands(message)
+        return
 
-    # AYUDA: "comandos" o "lista de comandos"
+    if message.author.bot:
+        return
+    content = message.content.strip().lower()
+    if content == "ranking":
+        data = get_all_participants()
+        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+        user_id = str(message.author.id)
+        found = False
+        user_rank = 0
+        for rank, (uid, player) in enumerate(sorted_players, 1):
+            if uid == user_id:
+                user_rank = rank
+                found = True
+                break
+        stage_name = stage_names.get(current_stage, f"Etapa {current_stage}")
+        if found:
+            response = f"🏆 {message.author.display_name}, tu ranking en {stage_name} es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id].get('puntos', 0)} puntos."
+        else:
+            response = "❌ No estás registrado en el torneo."
+        await message.channel.send(response)
+        return
+
+    if content == "topmejores":
+        data = get_all_participants()
+        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+        stage_name = stage_names.get(current_stage, f"Etapa {current_stage}")
+        ranking_text = f"🏅 Top 10 Mejores de {stage_name}:\n"
+        for idx, (uid, player) in enumerate(sorted_players[:10], 1):
+            ranking_text += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
+        await message.channel.send(ranking_text)
+        return
+
     if content in ["comandos", "lista de comandos"]:
         help_text = (
             "**Resumen de Comandos (Lenguaje Natural):**\n\n"
@@ -603,8 +591,7 @@ async def on_message(message):
         await message.channel.send(help_text)
         return
 
-    # MIS ESTRELLAS: muestra cuántas estrellas simbólicas tiene el usuario
-    if "misestrellas" in content:
+    if content in ["misestrellas"]:
         participant = get_participant(str(message.author.id))
         symbolic = 0
         if participant:
@@ -615,22 +602,10 @@ async def on_message(message):
         await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
         return
 
-    # TOP ESTRELLAS: muestra el top 10 de usuarios con más estrellas simbólicas
-    if "topestrellas" in content:
-        data = get_all_participants()
-        sorted_by_symbolic = sorted(
-            data["participants"].items(),
-            key=lambda item: int(item[1].get("symbolic", 0)),
-            reverse=True
-        )
-        ranking_text = "🌟 **Top 10 Estrellas Simbólicas:**\n"
-        for idx, (uid, player) in enumerate(sorted_by_symbolic[:10], 1):
-            count = int(player.get("symbolic", 0))
-            ranking_text += f"{idx}. {player['nombre']} - {count} estrellas\n"
-        await message.channel.send(ranking_text)
+    if content in ["chiste", "cuéntame un chiste"]:
+        await message.channel.send(get_random_joke())
         return
 
-    # TRIVIA
     if any(phrase in content for phrase in ["quiero jugar trivia", "jugar trivia", "trivia"]):
         if message.channel.id not in active_trivia:
             trivia = random.choice(trivia_questions)
@@ -640,23 +615,28 @@ async def on_message(message):
 
     if message.channel.id in active_trivia:
         trivia = active_trivia[message.channel.id]
-        if message.content.lower().strip() == trivia['answer'].lower():
+        if message.content.strip().lower() == trivia['answer'].lower():
             symbolic = award_symbolic_reward(message.author, 1)
             response = f"🎉 ¡Correcto, {message.author.display_name}! Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
             await message.channel.send(response)
             del active_trivia[message.channel.id]
             return
 
-    # PIEDRA, PAPEL O TIJERAS
-    if "juguemos piedra papel tijeras" in content:
+    if any(phrase in content for phrase in ["oráculo", "predicción"]):
+        prediction = random.choice(predicciones)
+        await message.channel.send(f"🔮 {prediction}")
+        return
+
+    if content in ["meme", "muéstrame un meme"]:
+        meme_url = random.choice(MEMES)
+        await message.channel.send(meme_url)
+        return
+
+    if any(phrase in content for phrase in ["juguemos piedra papel tijeras"]):
         opciones = ["piedra", "papel", "tijeras"]
-        user_choice = None
-        for op in opciones:
-            if op in content:
-                user_choice = op
-                break
+        user_choice = next((op for op in opciones if op in content), None)
         if not user_choice:
-            await message.channel.send("¿Cuál eliges? Por favor indica piedra, papel o tijeras en tu mensaje.")
+            await message.channel.send("¿Cuál eliges? Indica piedra, papel o tijeras.")
             return
         bot_choice = random.choice(opciones)
         if user_choice == bot_choice:
@@ -672,7 +652,6 @@ async def on_message(message):
         await message.channel.send(result)
         return
 
-    # DUEL DE CHISTES
     if "duelo de chistes contra" in content:
         if message.mentions:
             opponent = message.mentions[0]
@@ -690,75 +669,34 @@ async def on_message(message):
             await message.channel.send(duel_text)
             return
 
-    # ORÁCULO / PREDICCIÓN
-    if "oráculo" in content or "predicción" in content:
-        prediction = random.choice(predicciones)
-        await message.channel.send(f"🔮 {prediction}")
-        return
-
-    # MEME GENERATOR
-    if "meme" in content or "muéstrame un meme" in content:
-        meme_url = random.choice(MEMES)
-        await message.channel.send(meme_url)
-        return
-
-    # TOP 10 MEJORES (puntaje del torneo)
-    if "topmejores" in content:
-        data = get_all_participants()
-        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
-        ranking_text = "🏅 **Top 10 Mejores del Torneo:**\n"
-        for idx, (uid, player) in enumerate(sorted_players[:10], 1):
-            ranking_text += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
-        await message.channel.send(ranking_text)
-        return
-
-    # RANKING PERSONAL (puntaje del torneo)
-    if "ranking" in content:
-        data = get_all_participants()
-        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
-        user_id = str(message.author.id)
-        found = False
-        user_rank = 0
-        for rank, (uid, player) in enumerate(sorted_players, 1):
-            if uid == user_id:
-                user_rank = rank
-                found = True
-                break
-        if found:
-            await message.channel.send(f"🏆 {message.author.display_name}, tu ranking es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id].get('puntos', 0)} puntos en el torneo.")
-        else:
-            await message.channel.send("❌ No estás registrado en el torneo.")
-        return
-
-    # CHISTE (si se menciona "chiste" o "cuéntame un chiste")
-    if "chiste" in content or "cuéntame un chiste" in content:
-        await message.channel.send(get_random_joke())
-        return
-
-    # Procesar comandos solo si el mensaje empieza con el prefijo
+    # Procesar comandos si el mensaje empieza con el prefijo
     if message.content.startswith(PREFIX):
         await bot.process_commands(message)
 
-##############################
+######################################
 # EVENTO ON_READY
-##############################
+######################################
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
 
-##############################
+######################################
 # SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (API PRIVADA)
-##############################
-# (Los endpoints de la API ya están definidos anteriormente)
-# Aquí ya se creó el objeto "app" y los endpoints.
+######################################
+app = Flask(__name__)
+
+# Agregamos una ruta raíz para que Render detecte un puerto abierto.
+@app.route("/")
+def home():
+    return "El bot está funcionando!", 200
+
 def run_webserver():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
-thread = threading.Thread(target=run_webserver)
-thread.start()
+threading.Thread(target=run_webserver).start()
 
-##############################
+######################################
 # INICIAR EL BOT
-##############################
+######################################
 bot.run(os.getenv('DISCORD_TOKEN'))
