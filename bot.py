@@ -11,14 +11,14 @@ from flask import Flask
 ##############################
 # CONFIGURACIÓN DEL PROPIETARIO Y CANALES
 ##############################
-OWNER_ID = 1336609089656197171         # REEMPLAZA con tu Discord ID (como entero)
-PRIVATE_CHANNEL_ID = 1338130641354620988  # REEMPLAZA con el ID del canal privado (para comandos sensibles)
-PUBLIC_CHANNEL_ID  = 1338126297666424874  # REEMPLAZA con el ID del canal público (donde se muestran resultados)
+OWNER_ID = 1336609089656197171         # Tu Discord ID (como entero)
+PRIVATE_CHANNEL_ID = 1338130641354620988  # ID del canal privado (para comandos sensibles)
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público (donde se muestran resultados)
 
 ##############################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
 ##############################
-# Render inyecta la variable de entorno DATABASE_URL con la Internal Database URL
+# Render inyecta la variable de entorno DATABASE_URL (usar la Internal Database URL)
 DATABASE_URL = os.environ.get("DATABASE_URL")
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
@@ -115,7 +115,7 @@ def award_symbolic_reward(user: discord.Member, reward: int):
     return new_symbolic
 
 ##############################
-# CHISTES: 120 chistes (70 originales + 50 nuevos)
+# CHISTES: 170 chistes (120 previos + 50 nuevos)
 ##############################
 ALL_JOKES = [
     # --- 70 chistes originales ---
@@ -189,7 +189,8 @@ ALL_JOKES = [
     "¿Qué le dijo una estrella a otra? Brilla, que brillas.",
     "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
     "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma.",
-    # --- 50 chistes nuevos (adicionales) ---
+
+    # --- 50 chistes nuevos (adicionales) ya existentes (antes tenías 50 extras)
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones.",
     "¿Por qué la bicicleta no se siente sola? Porque siempre tiene dos ruedas.",
@@ -235,13 +236,49 @@ ALL_JOKES = [
     "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
     "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
     "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
-    "¿Qué hace una botella de agua en el desierto? Se hidrata de alegría.",
-    "¿Por qué la escoba es buena en matemáticas? Porque siempre barre con los números.",
-    "¿Qué dijo el microondas al refrigerador? ¡Calienta la competencia!",
-    "¿Por qué el libro se quedó en silencio? Porque tenía muchas páginas en blanco.",
-    "¿Qué hace una lámpara en una fiesta? Ilumina la diversión."
+
+    # --- 50 chistes nuevos (extra, los mejores que jamás he creado) ---
+    "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo.",
+    "¿Qué hace un pez en el ordenador? Nada en la red.",
+    "¿Por qué los fantasmas no pueden mentir? Porque se les ve a través.",
+    "¿Qué le dijo una computadora a otra? ¡Eres mi byte favorito!",
+    "¿Por qué el pan no se duerme? Porque siempre está tostado.",
+    "¿Qué hace una impresora en el desierto? Imprime arena.",
+    "¿Por qué la luna se fue de vacaciones? Porque necesitaba un descanso de la Tierra.",
+    "¿Qué le dijo el vino al queso? ¡Juntos somos una combinación perfecta!",
+    "¿Por qué el semáforo siempre es puntual? Porque nunca se queda en rojo.",
+    "¿Qué hace una escalera en la nieve? Se derrite de frío.",
+    "¿Por qué el gato estudió informática? Porque quería ser el ratón de biblioteca.",
+    "¿Qué le dijo el árbol a la brisa? ¡Eres mi aire favorito!",
+    "¿Por qué el café se hizo influencer? Porque siempre estaba espresso en las redes.",
+    "¿Qué hace un zapato en una cita? Camina a tu lado.",
+    "¿Por qué la lámpara se negó a trabajar? Porque estaba en modo ahorro.",
+    "¿Qué le dijo el ventilador al termómetro? ¡Nos complementamos perfectamente!",
+    "¿Por qué el reloj se sintió presionado? Porque no tenía tiempo para descansar.",
+    "¿Qué hace un libro en la playa? Se abre al sol.",
+    "¿Por qué el lápiz rompió con la pluma? Porque necesitaba escribir su propia historia.",
+    "¿Qué dijo el espejo cuando vio su reflejo? ¡Eres mi otra mitad!",
+    "¿Por qué la manzana se volvió famosa? Porque siempre tenía un iPhone a la mano.",
+    "¿Qué hace un teléfono en el cine? Toma selfies en la oscuridad.",
+    "¿Por qué el ratón de computadora fue a la escuela? Para mejorar su clic.",
+    "¿Qué le dijo el jardín a la maceta? ¡Eres la flor de mi vida!",
+    "¿Por qué el helado fue al médico? Porque se sentía derretido por dentro.",
+    "¿Qué hace un carro en el gimnasio? Levanta ruedas.",
+    "¿Por qué el panadero fue a la playa? Porque quería hacer pan tostado.",
+    "¿Qué dijo el tomate a la lechuga? ¡Eres la ensalada de mi vida!",
+    "¿Por qué el camión se puso a cantar? Porque tenía una gran carga de ritmo.",
+    "¿Qué hace un globo en la oficina? Eleva la productividad.",
+    "¿Por qué la batería se siente recargada? Porque siempre está conectada.",
+    "¿Qué dijo el reloj digital al analógico? ¡Actualízate, amigo!",
+    "¿Por qué el zapato se sintió perdido? Porque no encontró su par.",
+    "¿Qué hace una taza en una fiesta de té? Se sirve de buena compañía.",
+    "¿Por qué la cuchara siempre es amable? Porque tiene una gran capacidad de servir.",
+    "¿Qué le dijo la ventana al sol? ¡Déjame ver el mundo!",
+    "¿Por qué el motor se emocionó? Porque se encendió la pasión.",
+    "¿Qué hace un boomerang cuando se cansa? Se queda en pausa y vuelve a su punto."
 ]
 
+# Función para obtener un chiste aleatorio sin repetir hasta agotar la lista
 unused_jokes = ALL_JOKES.copy()
 def get_random_joke():
     global unused_jokes, ALL_JOKES
@@ -445,7 +482,7 @@ async def on_message(message):
             "   - **topmejores:** Muestra el ranking de los 10 jugadores con mayor puntaje del torneo.\n"
             "   - **misestrellas:** Muestra cuántas estrellas simbólicas tienes.\n"
             "   - **topestrellas:** Muestra el ranking de los 10 jugadores con más estrellas simbólicas.\n"
-            "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio (sin repetir hasta agotar la lista de 120 chistes).\n"
+            "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio (sin repetir hasta agotar la lista de 170 chistes).\n"
             "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia; si respondes correctamente, ganas 1 estrella simbólica.\n"
             "   - **oráculo** o **predicción:** Recibe una predicción divertida.\n"
             "   - **meme** o **muéstrame un meme:** Muestra un meme aleatorio.\n"
