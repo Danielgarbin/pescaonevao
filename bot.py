@@ -252,22 +252,42 @@ async def on_ready():
 async def on_message(message):
     if message.author.bot:
         return
-    
+
     content = message.content.lower()
-    
-    if "ranking" in content:
+
+    # Si se menciona "topmejores", mostrar los 10 mejores jugadores
+    if "topmejores" in content:
         data = load_data()
         sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
-        ranking_text = "🏅 Ranking Actual:\n"
-        for idx, (user_id, player) in enumerate(sorted_players, 1):
+        ranking_text = "🏅 Top 10 Mejores:\n"
+        for idx, (user_id, player) in enumerate(sorted_players[:10], 1):
             ranking_text += f"{idx}. {player['nombre']} - {player['puntos']} puntos\n"
         await message.channel.send(ranking_text)
         return
-    
+
+    # Si se menciona "ranking", mostrar el ranking personal del usuario
+    elif "ranking" in content:
+        data = load_data()
+        sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
+        user_id = str(message.author.id)
+        found = False
+        user_rank = 0
+        for rank, (uid, player) in enumerate(sorted_players, 1):
+            if uid == user_id:
+                user_rank = rank
+                found = True
+                break
+        if found:
+            await message.channel.send(f"🏆 Tu ranking es el {user_rank} de {len(sorted_players)} con {data['participants'][user_id]['puntos']} puntos")
+        else:
+            await message.channel.send("❌ No estás registrado en el torneo")
+        return
+
+    # Si se solicita un chiste
     if "chiste" in content or "cuéntame un chiste" in content:
         await message.channel.send(random.choice(JOKES))
         return
-    
+
     await bot.process_commands(message)
 
 # ***********************
