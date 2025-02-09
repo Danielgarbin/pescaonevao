@@ -198,7 +198,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ----------------------------
-# Servidor Web para mantener el bot activo (útil para UptimeRobot)
+# Servidor Web para mantener el bot activo (útil para Render)
 # ----------------------------
 app = Flask('')
 
@@ -207,8 +207,8 @@ def home():
     return "El bot está funcionando!"
 
 def run_webserver():
-    # Replit suele utilizar el puerto 8080
-    app.run(host='0.0.0.0', port=8080)
+    port = int(os.environ.get("PORT", 8080))  # Usa el puerto asignado por Render o 8080 por defecto
+    app.run(host='0.0.0.0', port=port)
 
 # Iniciar el servidor web en un hilo separado
 thread = threading.Thread(target=run_webserver)
