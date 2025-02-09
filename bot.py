@@ -10,7 +10,7 @@ from flask import Flask
 ##############################
 # CONFIGURACIÓN DEL PROPIETARIO Y CANALES
 ##############################
-OWNER_ID = 1336609089656197171         # REEMPLAZA con tu Discord ID (entero)
+OWNER_ID = 1336609089656197171         # REEMPLAZA con tu Discord ID (como entero)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # REEMPLAZA con el ID del canal privado (para comandos sensibles)
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # REEMPLAZA con el ID del canal público (donde se muestran resultados)
 
@@ -110,7 +110,7 @@ ALL_JOKES = [
     "¿Por qué los vampiros no pueden jugar al fútbol? Porque siempre pierden la sangre en la cancha.",
     "¿Qué hace una araña en internet? Teje la web.",
     "¿Por qué la luna fue al médico? Porque se sentía en cuarto menguante.",
-    "¿Qué hace un globo en una fiesta? Se infla de felicidad.",
+    "¿Qué hace un globo en una fiesta? Se infla de felicidad!",
     "¿Qué le dice un gusano a otro? Voy a dar una vuelta a la manzana.",
     "¿Por qué las ardillas no usan celular? Porque ya tienen su propia cola.",
     "¿Qué hace una sombra en la oscuridad? Se esconde.",
@@ -427,22 +427,16 @@ async def on_message(message):
     # AYUDA: "comandos" o "lista de comandos"
     if content in ["comandos", "lista de comandos"]:
         help_text = (
-            "**Resumen de Comandos:**\n\n"
-            "• **Lenguaje Natural:**\n"
+            "**Resumen de Comandos (Lenguaje Natural):**\n\n"
             "   - **ranking:** Muestra tu posición y puntaje del torneo.\n"
             "   - **topmejores:** Muestra el ranking de los 10 jugadores con mayor puntaje del torneo.\n"
-            "   - **chiste** o **cuéntame un chiste:** Te devuelve un chiste aleatorio (sin repetición hasta agotar la lista).\n"
+            "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio (sin repetir hasta agotar la lista de 120 chistes).\n"
             "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia; si respondes correctamente, ganas 1 estrella simbólica.\n"
             "   - **oráculo** o **predicción:** Recibe una predicción divertida.\n"
-            "   - **meme** o **muéstrame un meme:** Te muestra un meme aleatorio.\n"
+            "   - **meme** o **muéstrame un meme:** Muestra un meme aleatorio.\n"
             "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras; si ganas, ganas 1 estrella simbólica.\n"
-            "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes entre tú y otro usuario; el ganador gana 1 estrella simbólica.\n\n"
-            "• **Comandos Sensibles (con '!') – Solo el Propietario en canal privado (afectan el puntaje del torneo):**\n"
-            "   - **!actualizar_puntuacion @usuario [puntos]**\n"
-            "   - **!reducir_puntuacion @usuario [puntos]**\n"
-            "   - **!avanzar_etapa**\n"
-            "   - **!eliminar_jugador @usuario**\n"
-            "   - **!configurar_etapa [número]**\n"
+            "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes; el ganador gana 1 estrella simbólica.\n"
+            "   - **comandos** o **lista de comandos:** Muestra este resumen de comandos.\n"
         )
         await message.channel.send(help_text)
         return
