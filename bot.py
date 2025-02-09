@@ -19,7 +19,7 @@ GUILD_ID = 1337387112403697694            # ID de tu servidor (guild)
 ######################################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
 ######################################
-DATABASE_URL = os.environ.get("DATABASE_URL")  # Configura esta variable en Render
+DATABASE_URL = os.environ.get("DATABASE_URL")  # Configurada en Render
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
@@ -41,15 +41,15 @@ init_db()
 ######################################
 # CONFIGURACIÓN DEL TORNEO: Etapas y Nombres
 ######################################
-STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}  # Número máximo de jugadores que avanzan en cada etapa
+STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}  # Cantidad máxima de jugadores que avanzan en cada etapa
 stage_names = {
     1: "Battle Royale",
     2: "Snipers vs Runners",
     3: "Boxfight duos",
     4: "Pescadito dice",
-    5: "Gran Final"  # Cambiado a "Gran Final"
+    5: "Gran Final"  # Nombre modificado
 }
-current_stage = 1  # Etapa inicial
+current_stage = 1  # Comenzamos en etapa 1
 
 ######################################
 # FUNCIONES PARA LA BASE DE DATOS
@@ -334,7 +334,7 @@ async def regresar_etapa(ctx):
         pass
 
 ######################################
-# COMANDOS DE LENGUAJE NATURAL (sin "!")
+# COMANDOS DE LENGUAJE NATURAL (Sin "!")
 ######################################
 @bot.event
 async def on_message(message):
