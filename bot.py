@@ -2,7 +2,6 @@ import discord
 import psycopg2
 import psycopg2.extras
 from discord.ext import commands
-from discord.ext.commands import MemberConverter
 import json
 import random
 import os
@@ -19,7 +18,8 @@ PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público (donde se mues
 ##############################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
 ##############################
-DATABASE_URL = os.environ.get("DATABASE_URL")  # Asegúrate de configurar esta variable en Render con la Internal Database URL
+# Render inyecta la variable de entorno DATABASE_URL (usa la Internal Database URL)
+DATABASE_URL = os.environ.get("DATABASE_URL")
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
@@ -189,7 +189,7 @@ ALL_JOKES = [
     "¿Qué le dijo una estrella a otra? Brilla, que brillas.",
     "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
     "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma.",
-    
+
     # --- 50 chistes nuevos (adicionales ya existentes, 50 extra) ---
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones.",
@@ -333,7 +333,7 @@ predicciones = [
 # INICIALIZACIÓN DEL BOT
 ##############################
 intents = discord.Intents.default()
-intents.members = True  # Habilitamos el intent de miembros para poder buscar usuarios no presentes en el canal
+intents.members = True  # Para poder buscar miembros que no estén en el canal actual
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
@@ -356,19 +356,16 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
         except:
             pass
         return
-    # Intentar convertir la cadena a miembro mediante MemberConverter
-    converter = MemberConverter()
     try:
-        member = await converter.convert(ctx, jugador)
-    except Exception as e:
-        # Si falla, intentar extraer el ID de la mención y buscar el miembro
-        try:
-            # Remover caracteres de mención (<@! ... >)
+        # Si el argumento es una mención, extraer el ID
+        if jugador.startswith("<@") and jugador.endswith(">"):
             id_str = jugador.strip("<@!>")
-            member = await ctx.guild.fetch_member(int(id_str))
-        except Exception as e:
-            await send_public_message("No se pudo encontrar al miembro.")
-            return
+        else:
+            id_str = jugador
+        member = await ctx.guild.fetch_member(int(id_str))
+    except Exception as e:
+        await send_public_message("No se pudo encontrar al miembro.")
+        return
     try:
         puntos = int(puntos)
     except ValueError:
@@ -430,7 +427,7 @@ async def avanzar_etapa(ctx):
         player["etapa"] = current_stage
         upsert_participant(uid, player)
         try:
-            user = await bot.fetch_user(int(uid))
+            user = await ctx.guild.fetch_member(int(uid))
             await user.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
@@ -448,16 +445,15 @@ async def eliminar_jugador(ctx, jugador: str):
         except:
             pass
         return
-    converter = MemberConverter()
     try:
-        member = await converter.convert(ctx, jugador)
-    except Exception as e:
-        try:
+        if jugador.startswith("<@") and jugador.endswith(">"):
             id_str = jugador.strip("<@!>")
-            member = await ctx.guild.fetch_member(int(id_str))
-        except Exception as e:
-            await send_public_message("No se pudo encontrar al miembro.")
-            return
+        else:
+            id_str = jugador
+        member = await ctx.guild.fetch_member(int(id_str))
+    except Exception as e:
+        await send_public_message("No se pudo encontrar al miembro.")
+        return
     user_id = str(member.id)
     with conn.cursor() as cur:
         cur.execute("DELETE FROM participants WHERE id = %s", (user_id,))
