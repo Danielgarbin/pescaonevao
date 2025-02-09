@@ -7,19 +7,23 @@ import random
 import os
 import re
 import threading
-from flask import Flask
+from flask import Flask, request, jsonify
 
-######################################
-# CONFIGURACIÓN: IDs y Servidor
-######################################
-OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
-CHANNEL_ID = 1338126297666424874         # Canal donde se publican resultados y se ejecutan los comandos
-GUILD_ID = 1337387112403697694            # ID de tu servidor (guild)
+##############################
+# CONFIGURACIÓN DEL PROPIETARIO Y CANALES
+##############################
+OWNER_ID = 1336609089656197171         # Tu Discord ID (como entero)
+PRIVATE_CHANNEL_ID = 1338130641354620988  # ID del canal privado (para comandos sensibles)
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público (donde se muestran resultados)
+GUILD_ID = 123456789012345678            # REEMPLAZA con el ID de tu servidor (guild)
 
-######################################
+# API_SECRET se usará para autenticar la API privada
+API_SECRET = os.environ.get("API_SECRET")  # Configura esta variable en Render
+
+##############################
 # CONEXIÓN A LA BASE DE DATOS POSTGRESQL
-######################################
-DATABASE_URL = os.environ.get("DATABASE_URL")  # Configurada en Render
+##############################
+DATABASE_URL = os.environ.get("DATABASE_URL")  # Asegúrate de configurar esta variable en Render (usualmente la Internal Database URL)
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
 
@@ -32,33 +36,21 @@ def init_db():
                 puntos INTEGER DEFAULT 0,
                 symbolic INTEGER DEFAULT 0,
                 etapa INTEGER DEFAULT 1,
-                eliminado BOOLEAN DEFAULT FALSE,
                 logros JSONB DEFAULT '[]'
             )
         """)
 init_db()
 
-######################################
-# CONFIGURACIÓN DEL TORNEO: Etapas y Nombres
-######################################
-STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}  # Máximo de jugadores que avanzan en cada etapa
-stage_names = {
-    1: "Battle Royale",
-    2: "Snipers vs Runners",
-    3: "Boxfight duos",
-    4: "Pescadito dice",
-    5: "Gran Final"
-}
-current_stage = 1  # Etapa inicial
+##############################
+# CONFIGURACIÓN INICIAL DEL TORNEO
+##############################
+PREFIX = '!'
+STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Etapa: jugadores que avanzan
+current_stage = 1
 
-######################################
-# VARIABLE GLOBAL PARA TRIVIA
-######################################
-active_trivia = {}  # key: channel.id, value: dict con la trivia actual
-
-######################################
-# FUNCIONES PARA LA BASE DE DATOS
-######################################
+##############################
+# FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS
+##############################
 def get_participant(user_id):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM participants WHERE id = %s", (user_id,))
@@ -76,14 +68,13 @@ def get_all_participants():
 def upsert_participant(user_id, participant):
     with conn.cursor() as cur:
         cur.execute("""
-            INSERT INTO participants (id, nombre, puntos, symbolic, etapa, eliminado, logros)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO participants (id, nombre, puntos, symbolic, etapa, logros)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 nombre = EXCLUDED.nombre,
                 puntos = EXCLUDED.puntos,
                 symbolic = EXCLUDED.symbolic,
                 etapa = EXCLUDED.etapa,
-                eliminado = EXCLUDED.eliminado,
                 logros = EXCLUDED.logros
         """, (
             user_id,
@@ -91,7 +82,6 @@ def upsert_participant(user_id, participant):
             participant.get("puntos", 0),
             participant.get("symbolic", 0),
             participant.get("etapa", current_stage),
-            participant.get("eliminado", False),
             json.dumps(participant.get("logros", []))
         ))
 
@@ -104,7 +94,6 @@ def update_score(user: discord.Member, delta: int):
             "puntos": 0,
             "symbolic": 0,
             "etapa": current_stage,
-            "eliminado": False,
             "logros": []
         }
     new_points = int(participant.get("puntos", 0)) + delta
@@ -121,7 +110,6 @@ def award_symbolic_reward(user: discord.Member, reward: int):
             "puntos": 0,
             "symbolic": 0,
             "etapa": current_stage,
-            "eliminado": False,
             "logros": []
         }
     current_symbolic = int(participant.get("symbolic", 0))
@@ -130,11 +118,11 @@ def award_symbolic_reward(user: discord.Member, reward: int):
     upsert_participant(user_id, participant)
     return new_symbolic
 
-######################################
-# CHISTES (170 chistes)
-######################################
+##############################
+# CHISTES: 170 chistes (120 previos + 50 nuevos extra)
+##############################
 ALL_JOKES = [
-    # Bloque 1: 70 chistes originales
+    # --- 70 chistes originales ---
     "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
     "¿Por qué los pájaros no usan Facebook? Porque ya tienen Twitter.",
     "¿Qué le dijo un semáforo a otro? No me mires, me estoy cambiando.",
@@ -205,8 +193,8 @@ ALL_JOKES = [
     "¿Qué le dijo una estrella a otra? Brilla, que brillas.",
     "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
     "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma.",
-
-    # Bloque 2: 50 chistes adicionales
+    
+    # --- 50 chistes nuevos (adicionales ya existentes, 50 extra) ---
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones.",
     "¿Por qué la bicicleta no se siente sola? Porque siempre tiene dos ruedas.",
@@ -252,8 +240,8 @@ ALL_JOKES = [
     "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
     "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
     "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
-
-    # Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
+    
+    # --- 50 chistes nuevos (los mejores que jamás he creado) ---
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo.",
     "¿Qué hace un pez en el ordenador? Nada en la red.",
     "¿Por qué los fantasmas no pueden mentir? Porque se les ve a través.",
@@ -291,43 +279,159 @@ ALL_JOKES = [
     "¿Por qué la cuchara siempre es amable? Porque tiene una gran capacidad de servir.",
     "¿Qué le dijo la ventana al sol? ¡Déjame ver el mundo!",
     "¿Por qué el motor se emocionó? Porque se encendió la pasión.",
-    "¿Qué hace un boomerang cuando se cansa? Se queda en pausa y vuelve a su punto.",
-    "¿Qué hace una impresora 4D? Imprime tu futuro.",
-    "¿Por qué el microondas es tan sabio? Porque siempre calienta la verdad.",
-    "¿Qué hace una cámara en una fiesta? Captura momentos inolvidables.",
-    "¿Por qué el altavoz nunca se calla? Porque siempre tiene voz.",
-    "¿Qué le dijo el modem al router? ¡Conéctate conmigo!",
-    "¿Por qué la batería siempre está en forma? Porque se carga constantemente.",
-    "¿Qué hace un cargador en el gimnasio? Levanta energía.",
-    "¿Por qué el disco duro siempre es puntual? Porque guarda el tiempo.",
-    "¿Qué dijo el proyector a la pantalla? ¡Ilumina mi camino!",
-    "¿Por qué el cable HDMI es un gran amigo? Porque siempre transmite buenas vibras.",
-    "¿Qué hace un ventilador en invierno? Enfría el ambiente.",
-    "¿Por qué el monitor siempre tiene buena imagen? Porque se cuida a sí mismo."
+    "¿Qué hace un boomerang cuando se cansa? Se queda en pausa y vuelve a su punto."
 ]
 
-######################################
+unused_jokes = ALL_JOKES.copy()
+def get_random_joke():
+    global unused_jokes, ALL_JOKES
+    if not unused_jokes:
+        unused_jokes = ALL_JOKES.copy()
+    joke = random.choice(unused_jokes)
+    unused_jokes.remove(joke)
+    return joke
+
+##############################
+# VARIABLES PARA ESTADOS DE JUEGOS NATURALES
+##############################
+active_trivia = {}  # key: channel.id, value: { "question": ..., "answer": ... }
+
+##############################
+# OTRAS VARIABLES (Trivia, Memes, Predicciones)
+##############################
+trivia_questions = [
+    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas"},
+    {"question": "¿En qué año llegó el hombre a la Luna?", "answer": "1969"},
+    {"question": "¿Cuál es el planeta más cercano al Sol?", "answer": "mercurio"},
+    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez"},
+    {"question": "¿Cuál es el animal terrestre más rápido?", "answer": "guepardo"},
+    {"question": "¿Cuántos planetas hay en el sistema solar?", "answer": "8"},
+    {"question": "¿En qué continente se encuentra Egipto?", "answer": "áfrica"},
+    {"question": "¿Cuál es el idioma más hablado en el mundo?", "answer": "chino"},
+    {"question": "¿Qué instrumento mide la temperatura?", "answer": "termómetro"},
+    {"question": "¿Cuál es la capital de Francia?", "answer": "parís"}
+]
+
+MEMES = [
+    "https://i.imgflip.com/1bij.jpg",
+    "https://i.imgflip.com/26am.jpg",
+    "https://i.imgflip.com/30b1gx.jpg",
+    "https://i.imgflip.com/3si4.jpg",
+    "https://i.imgflip.com/2fm6x.jpg"
+]
+
+predicciones = [
+    "Hoy, las estrellas te favorecen... ¡pero recuerda usar protector solar!",
+    "El oráculo dice: el mejor momento para actuar es ahora, ¡sin miedo!",
+    "Tu destino es tan brillante que necesitarás gafas de sol.",
+    "El futuro es incierto, pero las risas están garantizadas.",
+    "Hoy encontrarás una sorpresa inesperada... ¡quizás un buen chiste!",
+    "El universo conspira a tu favor, ¡aprovéchalo!",
+    "Tu suerte cambiará muy pronto, y será motivo de celebración.",
+    "Las oportunidades se presentarán, solo debes estar listo para recibirlas.",
+    "El oráculo revela que una gran aventura te espera en el horizonte.",
+    "Confía en tus instintos, el camino correcto se te mostrará."
+]
+
+##############################
 # INICIALIZACIÓN DEL BOT
-######################################
+##############################
 intents = discord.Intents.default()
-intents.members = True   # Para acceder a todos los miembros del servidor
+intents.members = True  # Para poder buscar miembros que no estén en el canal actual
 intents.messages = True
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
 async def send_public_message(message: str):
-    channel = bot.get_channel(CHANNEL_ID)
-    if channel:
-        await channel.send(message)
+    public_channel = bot.get_channel(PUBLIC_CHANNEL_ID)
+    if public_channel:
+        await public_channel.send(message)
     else:
         print("No se pudo encontrar el canal público.")
 
-######################################
-# COMANDOS SENSIBLES (Con "!" – Solo el propietario, en cualquier canal)
-######################################
-@bot.command(name="mas_puntos")
-async def mas_puntos(ctx, jugador: str, puntos: int):
-    if ctx.author.id != OWNER_ID:
+##############################
+# ENDPOINTS DE LA API PRIVADA
+##############################
+app = Flask(__name__)
+
+def check_auth(req):
+    auth = req.headers.get("Authorization")
+    if not auth or auth != f"Bearer {API_SECRET}":
+        return False
+    return True
+
+@app.route("/api/update_points", methods=["POST"])
+def api_update_points():
+    if not check_auth(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json()
+    if not data or "member_id" not in data or "points" not in data:
+        return jsonify({"error": "Missing parameters"}), 400
+    try:
+        member_id = int(data["member_id"])
+        points = int(data["points"])
+    except ValueError:
+        return jsonify({"error": "Invalid parameters"}), 400
+    guild = bot.get_guild(GUILD_ID)
+    if guild is None:
+        return jsonify({"error": "Guild not found"}), 404
+    try:
+        member = guild.get_member(member_id)
+        if member is None:
+            member = bot.loop.run_until_complete(guild.fetch_member(member_id))
+    except Exception as e:
+        return jsonify({"error": "Member not found", "details": str(e)}), 404
+    new_points = update_score(member, points)
+    bot.loop.create_task(send_public_message(f"✅ API: Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos"))
+    return jsonify({"message": "Puntuación actualizada", "new_points": new_points}), 200
+
+@app.route("/api/delete_member", methods=["POST"])
+def api_delete_member():
+    if not check_auth(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json()
+    if not data or "member_id" not in data:
+        return jsonify({"error": "Missing parameter: member_id"}), 400
+    try:
+        member_id = int(data["member_id"])
+    except ValueError:
+        return jsonify({"error": "Invalid member_id"}), 400
+    guild = bot.get_guild(GUILD_ID)
+    if guild is None:
+        return jsonify({"error": "Guild not found"}), 404
+    try:
+        member = guild.get_member(member_id)
+        if member is None:
+            member = bot.loop.run_until_complete(guild.fetch_member(member_id))
+    except Exception as e:
+        return jsonify({"error": "Member not found", "details": str(e)}), 404
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM participants WHERE id = %s", (str(member.id),))
+    bot.loop.create_task(send_public_message(f"✅ API: {member.display_name} eliminado del torneo"))
+    return jsonify({"message": "Miembro eliminado"}), 200
+
+@app.route("/api/set_stage", methods=["POST"])
+def api_set_stage():
+    if not check_auth(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json()
+    if not data or "stage" not in data:
+        return jsonify({"error": "Missing parameter: stage"}), 400
+    try:
+        stage = int(data["stage"])
+    except ValueError:
+        return jsonify({"error": "Invalid stage"}), 400
+    global current_stage
+    current_stage = stage
+    bot.loop.create_task(send_public_message(f"✅ API: Etapa actual configurada a {stage}"))
+    return jsonify({"message": "Etapa configurada", "stage": stage}), 200
+
+##############################
+# COMANDOS SENSIBLES DE DISCORD (con “!” – Solo el Propietario en canal privado)
+##############################
+@bot.command()
+async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -335,224 +439,224 @@ async def mas_puntos(ctx, jugador: str, puntos: int):
         return
     match = re.search(r'\d+', jugador)
     if not match:
-        try:
-            await ctx.message.delete()
-        except:
-            pass
+        await send_public_message("No se pudo encontrar al miembro.")
         return
     member_id = int(match.group())
     guild = ctx.guild or bot.get_guild(GUILD_ID)
     if guild is None:
-        try:
-            await ctx.message.delete()
-        except:
-            pass
+        await send_public_message("No se pudo determinar el servidor.")
         return
     try:
         member = guild.get_member(member_id)
         if member is None:
             member = await guild.fetch_member(member_id)
-    except Exception:
-        try:
-            await ctx.message.delete()
-        except:
-            pass
+    except Exception as e:
+        await send_public_message("No se pudo encontrar al miembro en el servidor.")
         return
     try:
         puntos = int(puntos)
     except ValueError:
-        try:
-            await ctx.message.delete()
-        except:
-            pass
+        await send_public_message("Por favor, proporciona un número válido de puntos.")
         return
     new_points = update_score(member, puntos)
-    await send_public_message(f"✅ {member.display_name} ahora tiene {new_points} puntos")
+    await send_public_message(f"✅ Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos")
     try:
         await ctx.message.delete()
     except:
         pass
 
-@bot.command(name="menos_puntos")
-async def menos_puntos(ctx, jugador: str, puntos: int):
-    await mas_puntos(ctx, jugador, -puntos)
+@bot.command()
+async def reducir_puntuacion(ctx, jugador: str, puntos: int):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    await actualizar_puntuacion(ctx, jugador, -puntos)
     try:
         await ctx.message.delete()
     except:
         pass
+
+@bot.command()
+async def ver_puntuacion(ctx):
+    participant = get_participant(str(ctx.author.id))
+    if participant:
+        await ctx.send(f"🏆 Tu puntaje del torneo es: {participant.get('puntos', 0)}")
+    else:
+        await ctx.send("❌ No estás registrado en el torneo")
+
+@bot.command()
+async def clasificacion(ctx):
+    data = get_all_participants()
+    sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+    ranking = "🏅 Clasificación del Torneo:\n"
+    for idx, (uid, player) in enumerate(sorted_players, 1):
+        ranking += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
+    await ctx.send(ranking)
 
 @bot.command()
 async def avanzar_etapa(ctx):
-    if ctx.author.id != OWNER_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
             pass
         return
     global current_stage
-    new_stage = current_stage + 1
-    required = STAGES.get(new_stage)
-    if not required:
-        await send_public_message("No existe una etapa siguiente definida.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
+    current_stage += 1
     data = get_all_participants()
-    active_players = []
-    for uid, player in data["participants"].items():
-        if (player.get("etapa", 1) == current_stage) and (not player.get("eliminado", False)):
-            active_players.append((uid, player))
-    sorted_players = sorted(active_players, key=lambda x: int(x[1].get("puntos", 0)), reverse=True)
-    advancing = sorted_players[:required]
-    eliminated = sorted_players[required:]
-    for uid, player in advancing:
-        player["etapa"] = new_stage
-        player["eliminado"] = False
+    sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+    cutoff = STAGES[current_stage]
+    avanzan = sorted_players[:cutoff]
+    for uid, player in avanzan:
+        player["etapa"] = current_stage
         upsert_participant(uid, player)
         try:
             member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
-            await member.send(f"🎉 ¡Felicitaciones! Has avanzado a {stage_names[new_stage]}!")
+            await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
         except Exception as e:
-            print(f"Error enviando DM a {uid}: {e}")
-    for uid, player in eliminated:
-        player["eliminado"] = True
-        upsert_participant(uid, player)
-        try:
-            member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
-            await member.send(f"😢 Lo siento, has sido eliminado del torneo en {stage_names[new_stage]}.")
-        except Exception as e:
-            print(f"Error enviando DM a {uid}: {e}")
-    current_stage = new_stage
-    await send_public_message(f"✅ Ahora estamos en {stage_names[new_stage]}.")
+            print(f"Error al enviar mensaje a {uid}: {e}")
+    await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron")
     try:
         await ctx.message.delete()
     except:
         pass
 
 @bot.command()
-async def regresar_etapa(ctx):
-    if ctx.author.id != OWNER_ID:
+async def eliminar_jugador(ctx, jugador: str):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    match = re.search(r'\d+', jugador)
+    if not match:
+        await send_public_message("No se pudo encontrar al miembro.")
+        return
+    member_id = int(match.group())
+    guild = ctx.guild or bot.get_guild(GUILD_ID)
+    if guild is None:
+        await send_public_message("No se pudo determinar el servidor.")
+        return
+    try:
+        member = guild.get_member(member_id) or await guild.fetch_member(member_id)
+    except Exception as e:
+        await send_public_message("No se pudo encontrar al miembro en el servidor.")
+        return
+    user_id = str(member.id)
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM participants WHERE id = %s", (user_id,))
+    await send_public_message(f"✅ {member.display_name} eliminado del torneo")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def configurar_etapa(ctx, etapa: int):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
             pass
         return
     global current_stage
-    if current_stage == 1:
-        await send_public_message("Ya estás en la etapa 1. No se puede retroceder más.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    new_stage = current_stage - 1
-    data = get_all_participants()
-    for uid, player in data["participants"].items():
-        if player.get("etapa", 1) > new_stage:
-            player["etapa"] = new_stage
-            player["eliminado"] = False
-            upsert_participant(uid, player)
-    current_stage = new_stage
-    await send_public_message(f"✅ Se ha retrocedido a {stage_names[new_stage]}.")
+    current_stage = etapa
+    await send_public_message(f"✅ Etapa actual configurada a {etapa}")
     try:
         await ctx.message.delete()
     except:
         pass
 
-######################################
-# EVENTO ON_MESSAGE: Comandos de Lenguaje Natural
-######################################
+@bot.command()
+async def chiste(ctx):
+    await ctx.send(get_random_joke())
+
+##############################
+# INTERACCIÓN EN LENGUAJE NATURAL (Sin “!”)
+##############################
 @bot.event
 async def on_message(message):
-    # Si el mensaje comienza con "!" y el autor no es el propietario, se borra sin respuesta.
-    if message.content.startswith("!") and message.author.id != OWNER_ID:
-        try:
-            await message.delete()
-        except:
-            pass
-        return
-
-    # Si el mensaje comienza con "!" y es del propietario, se procesa como comando sensible.
-    if message.content.startswith("!") and message.author.id == OWNER_ID:
-        await bot.process_commands(message)
-        return
-
     if message.author.bot:
         return
-    content = message.content.strip().lower()
-    if content == "ranking":
-        data = get_all_participants()
-        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
-        user_id = str(message.author.id)
-        found = False
-        user_rank = 0
-        for rank, (uid, player) in enumerate(sorted_players, 1):
-            if uid == user_id:
-                user_rank = rank
-                found = True
-                break
-        stage_name = stage_names.get(current_stage, f"Etapa {current_stage}")
-        if found:
-            response = f"🏆 {message.author.display_name}, tu ranking en {stage_name} es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id].get('puntos', 0)} puntos."
-        else:
-            response = "❌ No estás registrado en el torneo."
-        await message.channel.send(response)
-        return
-    if content == "topmejores":
-        data = get_all_participants()
-        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
-        stage_name = stage_names.get(current_stage, f"Etapa {current_stage}")
-        ranking_text = f"🏅 Top 10 Mejores de {stage_name}:\n"
-        for idx, (uid, player) in enumerate(sorted_players[:10], 1):
-            ranking_text += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
-        await message.channel.send(ranking_text)
-        return
+
+    content = message.content.lower().strip()
+
+    # AYUDA: "comandos" o "lista de comandos"
     if content in ["comandos", "lista de comandos"]:
         help_text = (
             "**Resumen de Comandos (Lenguaje Natural):**\n\n"
-            "   - **ranking:** Muestra tu posición y puntaje individual (y si has sido eliminado).\n"
-            "   - **topmejores:** Muestra el Top 10 Mejores de la etapa actual.\n"
-            "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio.\n"
-            "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia.\n"
+            "   - **ranking:** Muestra tu posición y puntaje del torneo.\n"
+            "   - **topmejores:** Muestra el ranking de los 10 jugadores con mayor puntaje del torneo.\n"
+            "   - **misestrellas:** Muestra cuántas estrellas simbólicas tienes.\n"
+            "   - **topestrellas:** Muestra el ranking de los 10 jugadores con más estrellas simbólicas.\n"
+            "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio (sin repetir hasta agotar la lista de 170 chistes).\n"
+            "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia; si respondes correctamente, ganas 1 estrella simbólica.\n"
             "   - **oráculo** o **predicción:** Recibe una predicción divertida.\n"
             "   - **meme** o **muéstrame un meme:** Muestra un meme aleatorio.\n"
-            "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras.\n"
-            "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes.\n"
+            "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras; si ganas, ganas 1 estrella simbólica.\n"
+            "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes; el ganador gana 1 estrella simbólica.\n"
         )
         await message.channel.send(help_text)
         return
-    if content in ["chiste", "cuéntame un chiste"]:
-        await message.channel.send(get_random_joke())
+
+    # MIS ESTRELLAS: muestra cuántas estrellas simbólicas tiene el usuario
+    if "misestrellas" in content:
+        participant = get_participant(str(message.author.id))
+        symbolic = 0
+        if participant:
+            try:
+                symbolic = int(participant.get("symbolic", 0))
+            except:
+                symbolic = 0
+        await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
         return
+
+    # TOP ESTRELLAS: muestra el top 10 de usuarios con más estrellas simbólicas
+    if "topestrellas" in content:
+        data = get_all_participants()
+        sorted_by_symbolic = sorted(
+            data["participants"].items(),
+            key=lambda item: int(item[1].get("symbolic", 0)),
+            reverse=True
+        )
+        ranking_text = "🌟 **Top 10 Estrellas Simbólicas:**\n"
+        for idx, (uid, player) in enumerate(sorted_by_symbolic[:10], 1):
+            count = int(player.get("symbolic", 0))
+            ranking_text += f"{idx}. {player['nombre']} - {count} estrellas\n"
+        await message.channel.send(ranking_text)
+        return
+
+    # TRIVIA
     if any(phrase in content for phrase in ["quiero jugar trivia", "jugar trivia", "trivia"]):
         if message.channel.id not in active_trivia:
             trivia = random.choice(trivia_questions)
             active_trivia[message.channel.id] = trivia
             await message.channel.send(f"**Trivia:** {trivia['question']}\n_Responde en el chat._")
             return
+
     if message.channel.id in active_trivia:
         trivia = active_trivia[message.channel.id]
-        if message.content.strip().lower() == trivia['answer'].lower():
+        if message.content.lower().strip() == trivia['answer'].lower():
             symbolic = award_symbolic_reward(message.author, 1)
-            response = f"🎉 ¡Correcto, {message.author.display_name}! Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas."
+            response = f"🎉 ¡Correcto, {message.author.display_name}! Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
             await message.channel.send(response)
             del active_trivia[message.channel.id]
             return
-    if any(phrase in content for phrase in ["oráculo", "predicción"]):
-        prediction = random.choice(predicciones)
-        await message.channel.send(f"🔮 {prediction}")
-        return
-    if content in ["meme", "muéstrame un meme"]:
-        meme_url = random.choice(MEMES)
-        await message.channel.send(meme_url)
-        return
-    if any(phrase in content for phrase in ["juguemos piedra papel tijeras"]):
+
+    # PIEDRA, PAPEL O TIJERAS
+    if "juguemos piedra papel tijeras" in content:
         opciones = ["piedra", "papel", "tijeras"]
-        user_choice = next((op for op in opciones if op in content), None)
+        user_choice = None
+        for op in opciones:
+            if op in content:
+                user_choice = op
+                break
         if not user_choice:
-            await message.channel.send("¿Cuál eliges? Indica piedra, papel o tijeras.")
+            await message.channel.send("¿Cuál eliges? Por favor indica piedra, papel o tijeras en tu mensaje.")
             return
         bot_choice = random.choice(opciones)
         if user_choice == bot_choice:
@@ -562,11 +666,13 @@ async def on_message(message):
              (user_choice == "tijeras" and bot_choice == "papel"):
             result = f"¡Ganaste! Yo elegí **{bot_choice}**."
             symbolic = award_symbolic_reward(message.author, 1)
-            result += f" Ahora tienes {symbolic} estrellas."
+            result += f" Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
         else:
             result = f"Perdiste. Yo elegí **{bot_choice}**. ¡Inténtalo de nuevo!"
         await message.channel.send(result)
         return
+
+    # DUEL DE CHISTES
     if "duelo de chistes contra" in content:
         if message.mentions:
             opponent = message.mentions[0]
@@ -580,35 +686,79 @@ async def on_message(message):
             )
             winner = random.choice([challenger, opponent])
             symbolic = award_symbolic_reward(winner, 1)
-            duel_text += f"🎉 ¡El ganador es {winner.display_name}! Ahora tiene {symbolic} estrellas."
+            duel_text += f"🎉 ¡El ganador es {winner.display_name}! Ha ganado 1 estrella simbólica. Ahora tiene {symbolic} estrellas simbólicas."
             await message.channel.send(duel_text)
             return
-    await bot.process_commands(message)
 
-######################################
+    # ORÁCULO / PREDICCIÓN
+    if "oráculo" in content or "predicción" in content:
+        prediction = random.choice(predicciones)
+        await message.channel.send(f"🔮 {prediction}")
+        return
+
+    # MEME GENERATOR
+    if "meme" in content or "muéstrame un meme" in content:
+        meme_url = random.choice(MEMES)
+        await message.channel.send(meme_url)
+        return
+
+    # TOP 10 MEJORES (puntaje del torneo)
+    if "topmejores" in content:
+        data = get_all_participants()
+        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+        ranking_text = "🏅 **Top 10 Mejores del Torneo:**\n"
+        for idx, (uid, player) in enumerate(sorted_players[:10], 1):
+            ranking_text += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
+        await message.channel.send(ranking_text)
+        return
+
+    # RANKING PERSONAL (puntaje del torneo)
+    if "ranking" in content:
+        data = get_all_participants()
+        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+        user_id = str(message.author.id)
+        found = False
+        user_rank = 0
+        for rank, (uid, player) in enumerate(sorted_players, 1):
+            if uid == user_id:
+                user_rank = rank
+                found = True
+                break
+        if found:
+            await message.channel.send(f"🏆 {message.author.display_name}, tu ranking es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id].get('puntos', 0)} puntos en el torneo.")
+        else:
+            await message.channel.send("❌ No estás registrado en el torneo.")
+        return
+
+    # CHISTE (si se menciona "chiste" o "cuéntame un chiste")
+    if "chiste" in content or "cuéntame un chiste" in content:
+        await message.channel.send(get_random_joke())
+        return
+
+    # Procesar comandos solo si el mensaje empieza con el prefijo
+    if message.content.startswith(PREFIX):
+        await bot.process_commands(message)
+
+##############################
 # EVENTO ON_READY
-######################################
+##############################
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
 
-######################################
-# SERVIDOR WEB MÍNIMO (para que Render detecte un puerto abierto)
-######################################
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "El bot está funcionando!"
-
+##############################
+# SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (API PRIVADA)
+##############################
+# (Los endpoints de la API ya están definidos anteriormente)
+# Aquí ya se creó el objeto "app" y los endpoints.
 def run_webserver():
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=port)
 
-# Inicia el servidor Flask en un hilo separado
-threading.Thread(target=run_webserver).start()
+thread = threading.Thread(target=run_webserver)
+thread.start()
 
-######################################
+##############################
 # INICIAR EL BOT
-######################################
+##############################
 bot.run(os.getenv('DISCORD_TOKEN'))
