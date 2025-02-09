@@ -430,6 +430,8 @@ async def on_message(message):
             "**Resumen de Comandos (Lenguaje Natural):**\n\n"
             "   - **ranking:** Muestra tu posición y puntaje del torneo.\n"
             "   - **topmejores:** Muestra el ranking de los 10 jugadores con mayor puntaje del torneo.\n"
+            "   - **misestrellas:** Muestra tus estrellas simbólicas.\n"
+            "   - **topestrellas:** Muestra el ranking de los 10 jugadores con más estrellas simbólicas.\n"
             "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio (sin repetir hasta agotar la lista de 120 chistes).\n"
             "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia; si respondes correctamente, ganas 1 estrella simbólica.\n"
             "   - **oráculo** o **predicción:** Recibe una predicción divertida.\n"
@@ -439,6 +441,29 @@ async def on_message(message):
             "   - **comandos** o **lista de comandos:** Muestra este resumen de comandos.\n"
         )
         await message.channel.send(help_text)
+        return
+
+    # MIS ESTRELLAS: muestra cuántas estrellas simbólicas tienes
+    if "misestrellas" in content:
+        data = load_data()
+        user_id = str(message.author.id)
+        symbolic = int(data['participants'].get(user_id, {}).get('symbolic', 0))
+        await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
+        return
+
+    # TOP ESTRELLAS: muestra el top 10 de los que tienen más estrellas simbólicas
+    if "topestrellas" in content:
+        data = load_data()
+        sorted_by_symbolic = sorted(
+            data['participants'].items(),
+            key=lambda item: int(item[1].get('symbolic', 0)),
+            reverse=True
+        )
+        ranking_text = "🌟 **Top 10 Estrellas Simbólicas:**\n"
+        for idx, (uid, player) in enumerate(sorted_by_symbolic[:10], 1):
+            count = int(player.get('symbolic', 0))
+            ranking_text += f"{idx}. {player['nombre']} - {count} estrellas\n"
+        await message.channel.send(ranking_text)
         return
 
     # TRIVIA
@@ -514,7 +539,7 @@ async def on_message(message):
         await message.channel.send(meme_url)
         return
 
-    # TOP 10 MEJORES
+    # TOP 10 MEJORES (puntaje del torneo)
     if "topmejores" in content:
         data = load_data()
         sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
@@ -524,7 +549,7 @@ async def on_message(message):
         await message.channel.send(ranking_text)
         return
 
-    # RANKING PERSONAL (si se menciona "ranking" sin "topmejores")
+    # RANKING PERSONAL (puntaje del torneo)
     if "ranking" in content:
         data = load_data()
         sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
