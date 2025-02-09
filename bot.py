@@ -3,7 +3,6 @@ import discord
 from discord.ext import commands
 import random
 
-# Definir los permisos necesarios para el bot
 intents = discord.Intents.default()
 intents.members = True
 intents.messages = True
@@ -28,7 +27,6 @@ puntuaciones = {}
 @bot.event
 async def on_ready():
     print(f'Bot is ready. We have logged in as {bot.user}')
-    # Imprimir información del servidor si GUILD_ID está definido
     if GUILD_ID:
         guild = bot.get_guild(int(GUILD_ID))
         if guild:
