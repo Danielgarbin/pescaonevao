@@ -5,6 +5,7 @@ from discord.ext import commands
 import json
 import random
 import os
+import re
 import threading
 from flask import Flask
 
@@ -236,7 +237,7 @@ ALL_JOKES = [
     "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
     "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
     "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
-    
+
     # --- 50 chistes nuevos (los mejores que jamás he creado) ---
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo.",
     "¿Qué hace un pez en el ordenador? Nada en la red.",
@@ -356,12 +357,16 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
         except:
             pass
         return
+    # Extraer el ID numérico usando regex
+    match = re.search(r'\d+', jugador)
+    if not match:
+        await send_public_message("No se pudo encontrar al miembro.")
+        return
+    member_id = int(match.group())
     try:
-        # Extraer el ID del usuario (soporta mención o ID simple)
-        id_str = jugador.strip("<@!>")
-        member = ctx.guild.get_member(int(id_str))
+        member = ctx.guild.get_member(member_id)
         if member is None:
-            member = await ctx.guild.fetch_member(int(id_str))
+            member = await ctx.guild.fetch_member(member_id)
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro.")
         return
@@ -426,8 +431,10 @@ async def avanzar_etapa(ctx):
         player["etapa"] = current_stage
         upsert_participant(uid, player)
         try:
-            user = await ctx.guild.fetch_member(int(uid))
-            await user.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
+            member = ctx.guild.get_member(int(uid))
+            if member is None:
+                member = await ctx.guild.fetch_member(int(uid))
+            await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
     await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron")
@@ -444,11 +451,15 @@ async def eliminar_jugador(ctx, jugador: str):
         except:
             pass
         return
+    match = re.search(r'\d+', jugador)
+    if not match:
+        await send_public_message("No se pudo encontrar al miembro.")
+        return
+    member_id = int(match.group())
     try:
-        id_str = jugador.strip("<@!>")
-        member = ctx.guild.get_member(int(id_str))
+        member = ctx.guild.get_member(member_id)
         if member is None:
-            member = await ctx.guild.fetch_member(int(id_str))
+            member = await ctx.guild.fetch_member(member_id)
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro.")
         return
