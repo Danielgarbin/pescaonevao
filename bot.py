@@ -4,6 +4,20 @@ import json
 import random
 from typing import Dict, List
 
+# Conexión a la base de datos SQLite
+conn = sqlite3.connect('tournament.db')
+cursor = conn.cursor()
+
+# Crear la tabla de jugadores si no existe
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS players (
+        id INTEGER PRIMARY KEY,
+        score INTEGER DEFAULT 0,
+        stage INTEGER DEFAULT 1
+    )
+''')
+conn.commit()
+
 # Configuración inicial
 TOKEN = 'TU_TOKEN_DEL_BOT'
 PREFIX = '!'
@@ -27,7 +41,7 @@ intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix=PREFIX, intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Comandos de gestión de puntuaciones
 @bot.command()
@@ -142,4 +156,6 @@ async def configurar_etapa(ctx, etapa: int):
 async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
     
-bot.run(TOKEN)
+import os
+bot.run(os.getenv('DISCORD_TOKEN'))
+
