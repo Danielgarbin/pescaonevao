@@ -1,5 +1,2 @@
 discord.py
 flask
-transformers
-torch  # Agrega esta línea para PyTorch
-
