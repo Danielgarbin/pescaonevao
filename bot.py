@@ -1,5 +1,6 @@
 import discord
-import sqlite3
+import psycopg2
+import psycopg2.extras
 from discord.ext import commands
 import json
 import random
@@ -15,18 +16,26 @@ PRIVATE_CHANNEL_ID = 1338130641354620988  # REEMPLAZA con el ID del canal privad
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # REEMPLAZA con el ID del canal público (donde se muestran resultados)
 
 ##############################
-# CONEXIÓN A LA BASE DE DATOS SQLITE (para el torneo; opcional)
+# CONEXIÓN A LA BASE DE DATOS POSTGRESQL
 ##############################
-conn = sqlite3.connect('tournament.db')
-cursor = conn.cursor()
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS players (
-        id INTEGER PRIMARY KEY,
-        score INTEGER DEFAULT 0,
-        stage INTEGER DEFAULT 1
-    )
-''')
-conn.commit()
+# Render inyecta la variable DATABASE_URL
+DATABASE_URL = os.environ.get("DATABASE_URL")
+conn = psycopg2.connect(DATABASE_URL)
+conn.autocommit = True
+
+def init_db():
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS participants (
+                id TEXT PRIMARY KEY,
+                nombre TEXT,
+                puntos INTEGER DEFAULT 0,
+                symbolic INTEGER DEFAULT 0,
+                etapa INTEGER DEFAULT 1,
+                logros JSONB DEFAULT '[]'
+            )
+        """)
+init_db()
 
 ##############################
 # CONFIGURACIÓN INICIAL DEL TORNEO
@@ -36,23 +45,119 @@ STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Etapa: jugadores que avanzan
 current_stage = 1
 
 ##############################
-# SISTEMA DE ALMACENAMIENTO (JSON) PARA EL TORNEO
+# FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS
 ##############################
-def save_data(data):
-    with open('tournament_data.json', 'w') as f:
-        json.dump(data, f)
+def get_participant(user_id):
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM participants WHERE id = %s", (user_id,))
+        return cur.fetchone()
 
-def load_data():
-    try:
-        with open('tournament_data.json', 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {"participants": {}}
+def get_all_participants():
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM participants")
+        rows = cur.fetchall()
+        data = {"participants": {}}
+        for row in rows:
+            data["participants"][row["id"]] = row
+        return data
+
+def upsert_participant(user_id, participant):
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO participants (id, nombre, puntos, symbolic, etapa, logros)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                nombre = EXCLUDED.nombre,
+                puntos = EXCLUDED.puntos,
+                symbolic = EXCLUDED.symbolic,
+                etapa = EXCLUDED.etapa,
+                logros = EXCLUDED.logros
+        """, (
+            user_id,
+            participant["nombre"],
+            participant.get("puntos", 0),
+            participant.get("symbolic", 0),
+            participant.get("etapa", current_stage),
+            json.dumps(participant.get("logros", []))
+        ))
+
+def update_score(user: discord.Member, delta: int):
+    user_id = str(user.id)
+    participant = get_participant(user_id)
+    if participant is None:
+        participant = {
+            "nombre": user.display_name,
+            "puntos": 0,
+            "symbolic": 0,
+            "etapa": current_stage,
+            "logros": []
+        }
+    new_points = int(participant.get("puntos", 0)) + delta
+    participant["puntos"] = new_points
+    upsert_participant(user_id, participant)
+    return new_points
+
+def award_symbolic_reward(user: discord.Member, reward: int):
+    user_id = str(user.id)
+    participant = get_participant(user_id)
+    if participant is None:
+        participant = {
+            "nombre": user.display_name,
+            "puntos": 0,
+            "symbolic": 0,
+            "etapa": current_stage,
+            "logros": []
+        }
+    current_symbolic = int(participant.get("symbolic", 0))
+    new_symbolic = current_symbolic + reward
+    participant["symbolic"] = new_symbolic
+    upsert_participant(user_id, participant)
+    return new_symbolic
 
 ##############################
-# CHISTES – 120 chistes (70 originales + 50 nuevos)
+# Variables para estados de juegos naturales
+##############################
+active_trivia = {}  # key: channel.id, value: { "question": ..., "answer": ... }
+
+trivia_questions = [
+    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas"},
+    {"question": "¿En qué año llegó el hombre a la Luna?", "answer": "1969"},
+    {"question": "¿Cuál es el planeta más cercano al Sol?", "answer": "mercurio"},
+    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez"},
+    {"question": "¿Cuál es el animal terrestre más rápido?", "answer": "guepardo"},
+    {"question": "¿Cuántos planetas hay en el sistema solar?", "answer": "8"},
+    {"question": "¿En qué continente se encuentra Egipto?", "answer": "áfrica"},
+    {"question": "¿Cuál es el idioma más hablado en el mundo?", "answer": "chino"},
+    {"question": "¿Qué instrumento mide la temperatura?", "answer": "termómetro"},
+    {"question": "¿Cuál es la capital de Francia?", "answer": "parís"}
+]
+
+MEMES = [
+    "https://i.imgflip.com/1bij.jpg",
+    "https://i.imgflip.com/26am.jpg",
+    "https://i.imgflip.com/30b1gx.jpg",
+    "https://i.imgflip.com/3si4.jpg",
+    "https://i.imgflip.com/2fm6x.jpg"
+]
+
+predicciones = [
+    "Hoy, las estrellas te favorecen... ¡pero recuerda usar protector solar!",
+    "El oráculo dice: el mejor momento para actuar es ahora, ¡sin miedo!",
+    "Tu destino es tan brillante que necesitarás gafas de sol.",
+    "El futuro es incierto, pero las risas están garantizadas.",
+    "Hoy encontrarás una sorpresa inesperada... ¡quizás un buen chiste!",
+    "El universo conspira a tu favor, ¡aprovéchalo!",
+    "Tu suerte cambiará muy pronto, y será motivo de celebración.",
+    "Las oportunidades se presentarán, solo debes estar listo para recibirlas.",
+    "El oráculo revela que una gran aventura te espera en el horizonte.",
+    "Confía en tus instintos, el camino correcto se te mostrará."
+]
+
+##############################
+# Configuración de chistes
 ##############################
 ALL_JOKES = [
+    # (Aquí se incluyen los 120 chistes tal como en el ejemplo anterior)
     # --- 70 chistes originales ---
     "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
     "¿Por qué los pájaros no usan Facebook? Porque ya tienen Twitter.",
@@ -124,8 +229,7 @@ ALL_JOKES = [
     "¿Qué le dijo una estrella a otra? Brilla, que brillas.",
     "¿Cuál es el colmo de un sastre? Que siempre le quede corto el hilo.",
     "¿Qué hace un cartero en el gimnasio? Entrega mensajes y se pone en forma.",
-
-    # --- 50 chistes nuevos (adicionales) ---
+    # --- 50 chistes nuevos ---
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones.",
     "¿Por qué la bicicleta no se siente sola? Porque siempre tiene dos ruedas.",
@@ -178,70 +282,14 @@ ALL_JOKES = [
     "¿Qué hace una lámpara en una fiesta? Ilumina la diversión."
 ]
 
-##############################
-# FUNCIÓN PARA OTORGAR RECOMPENSAS SIMBÓLICAS (ESTRELLAS)
-##############################
-def award_symbolic_reward(user: discord.Member, reward: int):
-    data = load_data()
-    user_id = str(user.id)
-    if user_id not in data['participants']:
-        data['participants'][user_id] = {
-            'nombre': user.display_name,
-            'puntos': 0,          # Puntaje del torneo (se mantiene separado)
-            'symbolic': 0,        # Estrellas simbólicas
-            'etapa': current_stage,
-            'logros': []
-        }
-    else:
-        if 'symbolic' not in data['participants'][user_id]:
-            data['participants'][user_id]['symbolic'] = 0
-    try:
-        current_symbolic = int(data['participants'][user_id].get('symbolic', 0))
-    except:
-        current_symbolic = 0
-    new_symbolic = current_symbolic + reward
-    data['participants'][user_id]['symbolic'] = new_symbolic
-    save_data(data)
-    return new_symbolic
-
-##############################
-# VARIABLES PARA ESTADOS DE JUEGOS NATURALES
-##############################
-active_trivia = {}  # key: channel.id, value: { "question": ..., "answer": ... }
-
-trivia_questions = [
-    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas"},
-    {"question": "¿En qué año llegó el hombre a la Luna?", "answer": "1969"},
-    {"question": "¿Cuál es el planeta más cercano al Sol?", "answer": "mercurio"},
-    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez"},
-    {"question": "¿Cuál es el animal terrestre más rápido?", "answer": "guepardo"},
-    {"question": "¿Cuántos planetas hay en el sistema solar?", "answer": "8"},
-    {"question": "¿En qué continente se encuentra Egipto?", "answer": "áfrica"},
-    {"question": "¿Cuál es el idioma más hablado en el mundo?", "answer": "chino"},
-    {"question": "¿Qué instrumento mide la temperatura?", "answer": "termómetro"},
-    {"question": "¿Cuál es la capital de Francia?", "answer": "parís"}
-]
-
-MEMES = [
-    "https://i.imgflip.com/1bij.jpg",
-    "https://i.imgflip.com/26am.jpg",
-    "https://i.imgflip.com/30b1gx.jpg",
-    "https://i.imgflip.com/3si4.jpg",
-    "https://i.imgflip.com/2fm6x.jpg"
-]
-
-predicciones = [
-    "Hoy, las estrellas te favorecen... ¡pero recuerda usar protector solar!",
-    "El oráculo dice: el mejor momento para actuar es ahora, ¡sin miedo!",
-    "Tu destino es tan brillante que necesitarás gafas de sol.",
-    "El futuro es incierto, pero las risas están garantizadas.",
-    "Hoy encontrarás una sorpresa inesperada... ¡quizás un buen chiste!",
-    "El universo conspira a tu favor, ¡aprovéchalo!",
-    "Tu suerte cambiará muy pronto, y será motivo de celebración.",
-    "Las oportunidades se presentarán, solo debes estar listo para recibirlas.",
-    "El oráculo revela que una gran aventura te espera en el horizonte.",
-    "Confía en tus instintos, el camino correcto se te mostrará."
-]
+unused_jokes = ALL_JOKES.copy()
+def get_random_joke():
+    global unused_jokes, ALL_JOKES
+    if not unused_jokes:
+        unused_jokes = ALL_JOKES.copy()
+    joke = random.choice(unused_jokes)
+    unused_jokes.remove(joke)
+    return joke
 
 ##############################
 # INICIALIZACIÓN DEL BOT
@@ -259,7 +307,7 @@ async def send_public_message(message: str):
         print("No se pudo encontrar el canal público.")
 
 ##############################
-# COMANDOS DEL SISTEMA DE PUNTOS (con “!” – Solo el Propietario en canal privado)
+# COMANDOS SENSIBLES (con “!” – Solo el Propietario en canal privado)
 ##############################
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: discord.Member, puntos: int):
@@ -274,20 +322,8 @@ async def actualizar_puntuacion(ctx, jugador: discord.Member, puntos: int):
     except ValueError:
         await send_public_message("Por favor, proporciona un número válido de puntos.")
         return
-    data = load_data()
-    user_id = str(jugador.id)
-    if user_id in data['participants']:
-        current = int(data['participants'][user_id].get('puntos', 0))
-        data['participants'][user_id]['puntos'] = current + puntos
-    else:
-        data['participants'][user_id] = {
-            'nombre': jugador.display_name,
-            'puntos': puntos,
-            'etapa': current_stage,
-            'logros': []
-        }
-    save_data(data)
-    await send_public_message(f"✅ Puntuación actualizada: {jugador.display_name} ahora tiene {data['participants'][user_id]['puntos']} puntos")
+    new_points = update_score(jugador, puntos)
+    await send_public_message(f"✅ Puntuación actualizada: {jugador.display_name} ahora tiene {new_points} puntos")
     try:
         await ctx.message.delete()
     except:
@@ -309,20 +345,19 @@ async def reducir_puntuacion(ctx, jugador: discord.Member, puntos: int):
 
 @bot.command()
 async def ver_puntuacion(ctx):
-    data = load_data()
-    user_id = str(ctx.author.id)
-    if user_id in data['participants']:
-        await ctx.send(f"🏆 Tu puntaje del torneo es: {data['participants'][user_id]['puntos']}")
+    participant = get_participant(str(ctx.author.id))
+    if participant:
+        await ctx.send(f"🏆 Tu puntaje del torneo es: {participant.get('puntos', 0)}")
     else:
         await ctx.send("❌ No estás registrado en el torneo")
 
 @bot.command()
 async def clasificacion(ctx):
-    data = load_data()
-    sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
+    data = get_all_participants()
+    sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
     ranking = "🏅 Clasificación del Torneo:\n"
     for idx, (uid, player) in enumerate(sorted_players, 1):
-        ranking += f"{idx}. {player['nombre']} - {player['puntos']} puntos\n"
+        ranking += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
     await ctx.send(ranking)
 
 @bot.command()
@@ -335,25 +370,19 @@ async def avanzar_etapa(ctx):
         return
     global current_stage
     current_stage += 1
-    data = load_data()
-    sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
+    data = get_all_participants()
+    sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
     cutoff = STAGES[current_stage]
     avanzan = sorted_players[:cutoff]
-    eliminados = sorted_players[cutoff:]
+    # En este ejemplo, se actualizará la etapa de los jugadores que avanzan
     for uid, player in avanzan:
+        player["etapa"] = current_stage
+        upsert_participant(uid, player)
         try:
             user = await bot.fetch_user(int(uid))
             await user.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
-    for uid, player in eliminados:
-        try:
-            user = await bot.fetch_user(int(uid))
-            await user.send("❌ Lo siento, has sido eliminado del torneo")
-        except Exception as e:
-            print(f"Error al enviar mensaje a {uid}: {e}")
-    data['participants'] = {uid: player for uid, player in avanzan}
-    save_data(data)
     await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron")
     try:
         await ctx.message.delete()
@@ -368,18 +397,10 @@ async def eliminar_jugador(ctx, jugador: discord.Member):
         except:
             pass
         return
-    data = load_data()
-    uid = str(jugador.id)
-    if uid in data['participants']:
-        del data['participants'][uid]
-        save_data(data)
-        try:
-            await jugador.send("🚫 Has sido eliminado del torneo")
-        except:
-            pass
-        await send_public_message(f"✅ {jugador.display_name} eliminado del torneo")
-    else:
-        await send_public_message("❌ Jugador no encontrado")
+    user_id = str(jugador.id)
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM participants WHERE id = %s", (user_id,))
+    await send_public_message(f"✅ {jugador.display_name} eliminado del torneo")
     try:
         await ctx.message.delete()
     except:
@@ -406,7 +427,7 @@ async def chiste(ctx):
     await ctx.send(get_random_joke())
 
 ##############################
-# INTERACCIÓN EN LENGUAJE NATURAL (sin “!”)
+# INTERACCIÓN EN LENGUAJE NATURAL (Sin “!”)
 ##############################
 @bot.event
 async def on_message(message):
@@ -433,30 +454,29 @@ async def on_message(message):
         await message.channel.send(help_text)
         return
 
-    # MIS ESTRELLAS: muestra cuántas estrellas simbólicas tiene el usuario
+    # MIS ESTRELLAS
     if "misestrellas" in content:
-        data = load_data()
-        user_id = str(message.author.id)
+        participant = get_participant(str(message.author.id))
         symbolic = 0
-        if user_id in data['participants']:
+        if participant:
             try:
-                symbolic = int(data['participants'][user_id].get('symbolic', 0))
+                symbolic = int(participant.get("symbolic", 0))
             except:
                 symbolic = 0
         await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
         return
 
-    # TOP ESTRELLAS: muestra el top 10 de usuarios con más estrellas simbólicas
+    # TOP ESTRELLAS
     if "topestrellas" in content:
-        data = load_data()
+        data = get_all_participants()
         sorted_by_symbolic = sorted(
-            data['participants'].items(),
-            key=lambda item: int(item[1].get('symbolic', 0)),
+            data["participants"].items(),
+            key=lambda item: int(item[1].get("symbolic", 0)),
             reverse=True
         )
         ranking_text = "🌟 **Top 10 Estrellas Simbólicas:**\n"
         for idx, (uid, player) in enumerate(sorted_by_symbolic[:10], 1):
-            count = int(player.get('symbolic', 0))
+            count = int(player.get("symbolic", 0))
             ranking_text += f"{idx}. {player['nombre']} - {count} estrellas\n"
         await message.channel.send(ranking_text)
         return
@@ -535,18 +555,18 @@ async def on_message(message):
 
     # TOP 10 MEJORES (puntaje del torneo)
     if "topmejores" in content:
-        data = load_data()
-        sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
+        data = get_all_participants()
+        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
         ranking_text = "🏅 **Top 10 Mejores del Torneo:**\n"
         for idx, (uid, player) in enumerate(sorted_players[:10], 1):
-            ranking_text += f"{idx}. {player['nombre']} - {player['puntos']} puntos\n"
+            ranking_text += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
         await message.channel.send(ranking_text)
         return
 
     # RANKING PERSONAL (puntaje del torneo)
     if "ranking" in content:
-        data = load_data()
-        sorted_players = sorted(data['participants'].items(), key=lambda item: int(item[1]['puntos']), reverse=True)
+        data = get_all_participants()
+        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
         user_id = str(message.author.id)
         found = False
         user_rank = 0
@@ -556,7 +576,7 @@ async def on_message(message):
                 found = True
                 break
         if found:
-            await message.channel.send(f"🏆 {message.author.display_name}, tu ranking es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id]['puntos']} puntos en el torneo.")
+            await message.channel.send(f"🏆 {message.author.display_name}, tu ranking es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id].get('puntos', 0)} puntos en el torneo.")
         else:
             await message.channel.send("❌ No estás registrado en el torneo.")
         return
