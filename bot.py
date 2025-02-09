@@ -2,6 +2,7 @@ import discord
 import psycopg2
 import psycopg2.extras
 from discord.ext import commands
+from discord.ext.commands import MemberConverter
 import json
 import random
 import os
@@ -236,6 +237,7 @@ ALL_JOKES = [
     "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
     "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
     "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
+
     # --- 50 chistes nuevos (los mejores que jamás he creado) ---
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo.",
     "¿Qué hace un pez en el ordenador? Nada en la red.",
@@ -332,7 +334,7 @@ predicciones = [
 # INICIALIZACIÓN DEL BOT
 ##############################
 intents = discord.Intents.default()
-intents.members = True  # Habilitamos el intent para miembros para poder resolver menciones de usuarios
+intents.members = True  # Permite obtener información de todos los miembros del servidor
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
@@ -348,27 +350,34 @@ async def send_public_message(message: str):
 # COMANDOS SENSIBLES (con “!” – Solo el Propietario en canal privado)
 ##############################
 @bot.command()
-async def actualizar_puntuacion(ctx, jugador: discord.Member, puntos: int):
+async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
+    # Permitir que se use la mención o ID de usuario
     if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
             pass
         return
+    converter = MemberConverter()
+    try:
+        member = await converter.convert(ctx, jugador)
+    except Exception as e:
+        await send_public_message("No se pudo encontrar al miembro.")
+        return
     try:
         puntos = int(puntos)
     except ValueError:
         await send_public_message("Por favor, proporciona un número válido de puntos.")
         return
-    new_points = update_score(jugador, puntos)
-    await send_public_message(f"✅ Puntuación actualizada: {jugador.display_name} ahora tiene {new_points} puntos")
+    new_points = update_score(member, puntos)
+    await send_public_message(f"✅ Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos")
     try:
         await ctx.message.delete()
     except:
         pass
 
 @bot.command()
-async def reducir_puntuacion(ctx, jugador: discord.Member, puntos: int):
+async def reducir_puntuacion(ctx, jugador: str, puntos: int):
     if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
         try:
             await ctx.message.delete()
@@ -427,17 +436,23 @@ async def avanzar_etapa(ctx):
         pass
 
 @bot.command()
-async def eliminar_jugador(ctx, jugador: discord.Member):
+async def eliminar_jugador(ctx, jugador: str):
     if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
             pass
         return
-    user_id = str(jugador.id)
+    converter = MemberConverter()
+    try:
+        member = await converter.convert(ctx, jugador)
+    except Exception as e:
+        await send_public_message("No se pudo encontrar al miembro.")
+        return
+    user_id = str(member.id)
     with conn.cursor() as cur:
         cur.execute("DELETE FROM participants WHERE id = %s", (user_id,))
-    await send_public_message(f"✅ {jugador.display_name} eliminado del torneo")
+    await send_public_message(f"✅ {member.display_name} eliminado del torneo")
     try:
         await ctx.message.delete()
     except:
