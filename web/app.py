@@ -87,7 +87,7 @@ async def on_message(message):
     if "chiste" in message.content.lower():
         await message.channel.send(random.choice(chistes))
     
-    if "mi top" in message.content.lower():
+    if "mi top" in message.content.lower():  # Cambio solicitado
         jugador = message.author.name
         if jugador in puntuaciones:
             await message.channel.send(f'{jugador}, tu puntuación es {puntuaciones[jugador]} puntos')
