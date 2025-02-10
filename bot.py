@@ -17,9 +17,7 @@ from flask import Flask, request, jsonify
 ######################################
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles (no se utiliza en la versión final)
-PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles (por ejemplo, para cambios en la puntuación)
-# Canal exclusivo para los nuevos comandos de administración de chistes y trivias:
-ADMIN_JT_CHANNEL_ID = 1338624226470400010
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles (para activar los comandos sensibles)
 SPECIAL_HELP_CHANNEL = 1338608387197243422  # Canal especial para que el owner reciba la lista extendida de comandos
 GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
 
@@ -64,6 +62,18 @@ def init_db():
                 url TEXT NOT NULL
             )
         """)
+        # Tabla para eventos del calendario:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS calendar_events (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                event_datetime TIMESTAMP NOT NULL,
+                target_stage INTEGER NOT NULL,
+                initial_notified BOOLEAN DEFAULT FALSE,
+                day_reminder_sent BOOLEAN DEFAULT FALSE,
+                two_hour_reminder_sent BOOLEAN DEFAULT FALSE
+            )
+        """)
 init_db()
 
 ######################################
@@ -71,7 +81,7 @@ init_db()
 ######################################
 PREFIX = '!'
 # Configuración de etapas: cada etapa tiene un número determinado de jugadores.
-# Se agregan las etapas 7 y 8. (Recordá: ahora la etapa 7 se llamará "FALTA ESCOGER OBJETOS" y la etapa 8 "FIN")
+# Se agregan las etapas 7 y 8.
 STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14, 6: 1, 7: 1, 8: 1}
 current_stage = 1
 stage_names = {
@@ -315,7 +325,6 @@ def api_set_stage():
         return jsonify({"error": "Invalid stage"}), 400
     global current_stage, champion_id, forwarding_enabled, forwarding_end_time
     current_stage = stage
-    # Si la nueva etapa no es 6, 7 ni 8 se desactivan los reenvíos
     if current_stage not in [6,7,8]:
         champion_id = None
         forwarding_enabled = False
@@ -324,11 +333,20 @@ def api_set_stage():
     return jsonify({"message": "Etapa configurada", "stage": stage}), 200
 
 ######################################
-# COMANDOS SENSIBLES DE DISCORD (con “!” – Solo el Propietario en el canal autorizado)
+# RESTRICCIÓN PARA COMANDOS SENSIBLES
+# Estos comandos solo se pueden usar si:
+#   - El autor es OWNER_ID, y
+#   - El mensaje proviene de DM (ctx.guild is None) o del canal con ID PUBLIC_CHANNEL_ID (1338126297666424874)
+######################################
+def is_owner_and_allowed(ctx):
+    return ctx.author.id == OWNER_ID and (ctx.guild is None or ctx.channel.id == PUBLIC_CHANNEL_ID)
+
+######################################
+# COMANDOS SENSIBLES DE DISCORD (para puntuación, etc.)
 ######################################
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -380,7 +398,7 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
 
 @bot.command()
 async def reducir_puntuacion(ctx, jugador: str, puntos: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -411,7 +429,7 @@ async def clasificacion(ctx):
 
 @bot.command()
 async def avanzar_etapa(ctx):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -460,7 +478,7 @@ async def avanzar_etapa(ctx):
                 forwarding_enabled = False
                 forwarding_end_time = None
             await member.send(msg)
-            await asyncio.sleep(1)  # Pausa para evitar demasiadas solicitudes en poco tiempo
+            await asyncio.sleep(1)
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
     for uid, player in eliminados:
@@ -478,7 +496,7 @@ async def avanzar_etapa(ctx):
 
 @bot.command()
 async def retroceder_etapa(ctx):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -497,7 +515,6 @@ async def retroceder_etapa(ctx):
     for uid, player in data["participants"].items():
         player["etapa"] = current_stage
         upsert_participant(uid, player)
-    # Si la nueva etapa NO es 6, 7 ni 8, se desactivan los reenvíos
     if current_stage not in [6,7,8]:
         champion_id = None
         forwarding_enabled = False
@@ -510,7 +527,7 @@ async def retroceder_etapa(ctx):
 
 @bot.command()
 async def eliminar_jugador(ctx, jugador: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -553,7 +570,7 @@ async def eliminar_jugador(ctx, jugador: str):
 
 @bot.command()
 async def configurar_etapa(ctx, etapa: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -561,7 +578,6 @@ async def configurar_etapa(ctx, etapa: int):
         return
     global current_stage, champion_id, forwarding_enabled, forwarding_end_time
     current_stage = etapa
-    # Si la nueva etapa no es 6, 7 ni 8 se desactivan los reenvíos
     if current_stage not in [6,7,8]:
         champion_id = None
         forwarding_enabled = False
@@ -572,10 +588,9 @@ async def configurar_etapa(ctx, etapa: int):
     except:
         pass
 
-# Nuevo comando para saltar a la etapa deseada
 @bot.command()
 async def saltar_etapa(ctx, etapa: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -625,11 +640,11 @@ async def saltar_etapa(ctx, etapa: int):
         pass
 
 ######################################
-# COMANDO !trivia (disponible para el owner; los demás inician trivia por lenguaje natural)
+# COMANDO !trivia (disponible para OWNER_ID en DM o en canal permitido)
 ######################################
 @bot.command()
 async def trivia(ctx):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -650,12 +665,11 @@ async def chiste(ctx):
     await ctx.send(get_random_joke())
 
 ######################################
-# NUEVOS COMANDOS ADMIN PARA GESTIÓN DE CHISTES Y TRIVIAS
-# (Se validará que se ejecuten en el canal ADMIN_JT_CHANNEL_ID)
+# COMANDOS SENSIBLES PARA GESTIÓN DE CHISTES, TRIVIAS Y EVENTOS (solo OWNER_ID, en DM o en canal 1338126297666424874)
 ######################################
 @bot.command()
 async def agregar_chiste(ctx, *, chiste_text: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -672,7 +686,7 @@ async def agregar_chiste(ctx, *, chiste_text: str):
 
 @bot.command()
 async def eliminar_chiste(ctx, joke_id: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -691,7 +705,7 @@ async def eliminar_chiste(ctx, joke_id: int):
 
 @bot.command()
 async def agregar_chistes_masivos(ctx, *, chistes_text: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -712,7 +726,7 @@ async def agregar_chistes_masivos(ctx, *, chistes_text: str):
 
 @bot.command()
 async def agregar_trivia(ctx, *, trivia_data: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -736,7 +750,7 @@ async def agregar_trivia(ctx, *, trivia_data: str):
 
 @bot.command()
 async def eliminar_trivia(ctx, trivia_id: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -755,7 +769,7 @@ async def eliminar_trivia(ctx, trivia_id: int):
 
 @bot.command()
 async def agregar_trivias_masivas(ctx, *, trivias_text: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -779,10 +793,9 @@ async def agregar_trivias_masivas(ctx, *, trivias_text: str):
     except:
         pass
 
-# Nuevos comandos para borrar TODOS los chistes y todas las trivias
 @bot.command()
 async def borrar_todos_chistes(ctx):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -800,7 +813,7 @@ async def borrar_todos_chistes(ctx):
 
 @bot.command()
 async def borrar_todas_trivias(ctx):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+    if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
@@ -816,13 +829,156 @@ async def borrar_todas_trivias(ctx):
     except:
         pass
 
+# COMANDOS PARA CALENDARIO (EVENTOS)
+@bot.command()
+async def agregar_evento(ctx, *, evento_data: str):
+    if not is_owner_and_allowed(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    # Formato: nombre | DD/MM/YYYY | HH:MM | etapa
+    parts = [part.strip() for part in evento_data.split("|")]
+    if len(parts) < 4:
+        await send_public_message("❌ Formato incorrecto. Usa: nombre | DD/MM/YYYY | HH:MM | etapa")
+        return
+    name = parts[0]
+    date_str = parts[1]
+    time_str = parts[2]
+    stage_str = parts[3]
+    try:
+        event_dt = datetime.datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
+    except Exception as e:
+        await send_public_message("❌ Error al parsear la fecha/hora. Usa formato DD/MM/YYYY y HH:MM.")
+        return
+    try:
+        target_stage = int(stage_str)
+    except:
+        await send_public_message("❌ Error: La etapa debe ser un número.")
+        return
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO calendar_events (name, event_datetime, target_stage) VALUES (%s, %s, %s) RETURNING id", (name, event_dt, target_stage))
+        event_id = cur.fetchone()[0]
+    await send_public_message(f"✅ Evento agregado con ID {event_id}: **{name}** para {event_dt.strftime('%d/%m/%Y %H:%M')} dirigido a la etapa {target_stage}.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def eliminar_evento(ctx, event_id: int):
+    if not is_owner_and_allowed(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM calendar_events WHERE id = %s", (event_id,))
+        if cur.rowcount > 0:
+            await send_public_message(f"✅ Evento con ID {event_id} eliminado.")
+        else:
+            await send_public_message(f"❌ No se encontró el evento con ID {event_id}.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def notificar_evento(ctx, event_id: int):
+    if not is_owner_and_allowed(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM calendar_events WHERE id = %s", (event_id,))
+        event = cur.fetchone()
+    if not event:
+        await send_public_message(f"❌ No se encontró el evento con ID {event_id}.")
+        return
+    if event["initial_notified"]:
+        await send_public_message(f"❌ El evento con ID {event_id} ya fue notificado previamente.")
+        return
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM participants WHERE etapa = %s", (event["target_stage"],))
+        participants = cur.fetchall()
+    count = 0
+    for participant in participants:
+        try:
+            guild = bot.get_guild(GUILD_ID)
+            member = guild.get_member(int(participant["id"]))
+            if member is None:
+                member = await guild.fetch_member(int(participant["id"]))
+            await member.send(f"📅 Notificación de evento: **{event['name']}** se realizará el {event['event_datetime'].strftime('%d/%m/%Y %H:%M')}. ¡No te lo pierdas!")
+            count += 1
+            await asyncio.sleep(1)
+        except Exception as e:
+            print(f"Error notificar_evento a {participant['id']}: {e}")
+    with conn.cursor() as cur:
+        cur.execute("UPDATE calendar_events SET initial_notified = TRUE WHERE id = %s", (event_id,))
+    await send_public_message(f"✅ Notificación enviada a {count} participantes para el evento ID {event_id}.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+######################################
+# TAREA EN SEGUNDO PLANO: RECORDATORIOS AUTOMÁTICOS
+######################################
+async def check_event_reminders():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        now = datetime.datetime.utcnow()
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT * FROM calendar_events WHERE initial_notified = TRUE")
+            events = cur.fetchall()
+        for event in events:
+            event_dt = event["event_datetime"]
+            # Recordatorio de 1 día
+            if not event["day_reminder_sent"] and now >= event_dt - datetime.timedelta(days=1):
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("SELECT * FROM participants WHERE etapa = %s", (event["target_stage"],))
+                    participants = cur.fetchall()
+                for participant in participants:
+                    try:
+                        guild = bot.get_guild(GUILD_ID)
+                        member = guild.get_member(int(participant["id"]))
+                        if member is None:
+                            member = await guild.fetch_member(int(participant["id"]))
+                        await member.send(f"⏰ Recordatorio: Falta 1 día para el evento **{event['name']}** el {event_dt.strftime('%d/%m/%Y %H:%M')}.")
+                        await asyncio.sleep(1)
+                    except Exception as e:
+                        print(f"Error enviando recordatorio 1 día a {participant['id']}: {e}")
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE calendar_events SET day_reminder_sent = TRUE WHERE id = %s", (event["id"],))
+            # Recordatorio de 2 horas
+            if not event["two_hour_reminder_sent"] and now >= event_dt - datetime.timedelta(hours=2):
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("SELECT * FROM participants WHERE etapa = %s", (event["target_stage"],))
+                    participants = cur.fetchall()
+                for participant in participants:
+                    try:
+                        guild = bot.get_guild(GUILD_ID)
+                        member = guild.get_member(int(participant["id"]))
+                        if member is None:
+                            member = await guild.fetch_member(int(participant["id"]))
+                        await member.send(f"⏰ Recordatorio: Falta 2 horas para el evento **{event['name']}** el {event_dt.strftime('%d/%m/%Y %H:%M')}.")
+                        await asyncio.sleep(1)
+                    except Exception as e:
+                        print(f"Error enviando recordatorio 2 horas a {participant['id']}: {e}")
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE calendar_events SET two_hour_reminder_sent = TRUE WHERE id = %s", (event["id"],))
+        await asyncio.sleep(60)
+
 ######################################
 # EVENTO ON_MESSAGE: Comandos de Lenguaje Natural y reenvío de DMs del campeón
 ######################################
 @bot.event
 async def on_message(message):
-    global forwarding_enabled  # Se declara al inicio para evitar errores de variable local
-    # Si el mensaje proviene de un DM y es del campeón y estamos en etapa 6, 7 o 8, se reenvía al canal 1338610365327474690
+    global forwarding_enabled
     if message.guild is None and champion_id is not None and message.author.id == champion_id and forwarding_enabled:
         if forwarding_end_time is not None and datetime.datetime.utcnow() > forwarding_end_time:
             forwarding_enabled = False
@@ -833,28 +989,21 @@ async def on_message(message):
                     await forward_channel.send(f"**Mensaje del Campeón:** {message.content}")
             except Exception as e:
                 print(f"Error forwarding message: {e}")
-    # Procesa los comandos en mensajes que comiencen con "!" según la lógica existente
     if message.content.startswith("!") and message.author.id != OWNER_ID:
         try:
             await message.delete()
         except:
             pass
         return
-
     if message.content.startswith("!") and message.author.id == OWNER_ID:
         await bot.process_commands(message)
         return
-
     if message.author.bot:
         return
-
     global stage_names, current_stage, active_trivia
-
     def normalize_string_local(s):
         return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
-
     content = message.content.strip().lower()
-
     if content == "ranking":
         data = get_all_participants()
         sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
@@ -873,7 +1022,6 @@ async def on_message(message):
             response = "❌ No estás registrado en el torneo."
         await message.channel.send(response)
         return
-
     if content == "topmejores":
         data = get_all_participants()
         sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
@@ -883,7 +1031,6 @@ async def on_message(message):
             ranking_text += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
         await message.channel.send(ranking_text)
         return
-
     if content == "topestrellas":
         data = get_all_participants()
         sorted_by_symbolic = sorted(data["participants"].items(), key=lambda item: int(item[1].get("symbolic", 0)), reverse=True)
@@ -892,7 +1039,6 @@ async def on_message(message):
             ranking_text += f"{idx}. {player['nombre']} - {player.get('symbolic', 0)} estrellas\n"
         await message.channel.send(ranking_text)
         return
-
     if content in ["comandos", "lista de comandos"]:
         help_text = (
             "**Resumen de Comandos (Lenguaje Natural):**\n\n"
@@ -907,7 +1053,6 @@ async def on_message(message):
             "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras; si ganas, ganas 1 estrella simbólica.\n"
             "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes; el ganador gana 1 estrella simbólica.\n"
         )
-        # Ahora, si el autor es el OWNER_ID, se agregan también los comandos sensibles.
         if message.author.id == OWNER_ID:
             help_text += "\n**Comandos Sensibles (!):**\n"
             help_text += (
@@ -927,11 +1072,13 @@ async def on_message(message):
                 "   - **!eliminar_trivia [id]:** Elimina una trivia de la base de datos por su ID.\n"
                 "   - **!agregar_trivias_masivas [lista de trivias]:** Agrega múltiples trivias (cada línea en formato: pregunta | respuesta | [pista]).\n"
                 "   - **!borrar_todos_chistes:** Elimina todos los chistes existentes en la base de datos.\n"
-                "   - **!borrar_todas_trivias:** Elimina todas las trivias (con respuestas y pistas) existentes en la base de datos.\n"
+                "   - **!borrar_todas_trivias:** Elimina todas las trivias existentes en la base de datos.\n"
+                "   - **!agregar_evento [nombre] | [DD/MM/YYYY] | [HH:MM] | [etapa]:** Agrega un evento al calendario.\n"
+                "   - **!eliminar_evento [id]:** Elimina un evento del calendario.\n"
+                "   - **!notificar_evento [id]:** Envía notificación inicial por DM a los participantes de la etapa indicada en el evento.\n"
             )
         await message.channel.send(help_text)
         return
-
     if content == "misestrellas":
         participant = get_participant(str(message.author.id))
         symbolic = 0
@@ -942,19 +1089,14 @@ async def on_message(message):
                 symbolic = 0
         await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
         return
-
     if content in ["chiste", "cuéntame un chiste"]:
         await message.channel.send(get_random_joke())
         return
-
-    # --- MODIFICACIÓN PARA TRIVIA ---
     if any(phrase in content for phrase in ["quiero jugar trivia", "jugar trivia", "trivia"]):
         trivia_item = get_random_trivia()
         active_trivia[message.channel.id] = trivia_item
         await message.channel.send(f"**Trivia:** {trivia_item['question']}\n_Responde en el chat._")
         return
-    # ---------------------------------
-
     if message.channel.id in active_trivia:
         trivia_item = active_trivia[message.channel.id]
         normalized_msg = normalize_string_local(message.content.strip())
@@ -967,7 +1109,6 @@ async def on_message(message):
             await message.channel.send(response)
             del active_trivia[message.channel.id]
             return
-
     if any(phrase in content for phrase in ["oráculo", "predicción"]):
         prediction = random.choice([
             "Hoy, las estrellas te favorecen... ¡pero recuerda usar protector solar!",
@@ -975,12 +1116,10 @@ async def on_message(message):
         ])
         await message.channel.send(f"🔮 {prediction}")
         return
-
     if content in ["meme", "muéstrame un meme"]:
         meme_url = get_random_meme()
         await message.channel.send(meme_url)
         return
-
     if any(phrase in content for phrase in ["juguemos piedra papel tijeras"]):
         opciones = ["piedra", "papel", "tijeras"]
         user_choice = next((op for op in opciones if op in content), None)
@@ -1000,7 +1139,6 @@ async def on_message(message):
             result = f"Perdiste. Yo elegí **{bot_choice}**. ¡Inténtalo de nuevo!"
         await message.channel.send(result)
         return
-
     if "duelo de chistes contra" in content:
         if message.mentions:
             opponent = message.mentions[0]
@@ -1017,7 +1155,6 @@ async def on_message(message):
             duel_text += f"🎉 ¡El ganador es {winner.display_name}! Ha ganado 1 estrella simbólica. Ahora tiene {symbolic} estrellas simbólicas."
             await message.channel.send(duel_text)
             return
-
     await bot.process_commands(message)
 
 ######################################
@@ -1026,6 +1163,7 @@ async def on_message(message):
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
+    bot.loop.create_task(check_event_reminders())
 
 ######################################
 # SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (API PRIVADA)
@@ -1036,5 +1174,4 @@ def run_webserver():
 
 if __name__ == '__main__':
     threading.Thread(target=run_webserver).start()
-    # Se utiliza Uptimerobot para mantener el sitio activo, por lo que no se añade ninguna función de keep alive adicional.
     bot.run(os.getenv('DISCORD_TOKEN'))
