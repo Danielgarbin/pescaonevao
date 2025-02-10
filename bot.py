@@ -139,8 +139,7 @@ def normalize_string(s):
 ######################################
 # CHISTES: 170 chistes (los mejores que jamás he creado)
 ######################################
-# Aquí se incluyen 170 chistes divididos en 3 bloques.
-# Completa o reemplaza estos bloques con tus chistes definitivos.
+# Completa estos bloques con los 170 chistes definitivos.
 ALL_JOKES = [
     # Bloque 1: 70 chistes originales
     "¿Por qué el sol nunca se cansa? Porque siempre brilla con energía.",
@@ -238,7 +237,7 @@ ALL_JOKES = [
     "¿Por qué el teclado se volvió romántico? Porque encontró las teclas de su corazón.",
     "¿Qué hace un cuadro en un museo? Se queda enmarcado en sus pensamientos.",
     "¿Por qué el sombrero es tan humilde? Porque siempre se inclina ante la moda.",
-    # Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
+    # Bloque 3: 50 chistes nuevos
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo con fuerza.",
     "¿Qué hace un pez en el ordenador? Nada en la red con estilo.",
     "¿Por qué los fantasmas no pueden mentir? Porque su verdad se les ve a través.",
