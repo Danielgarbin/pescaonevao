@@ -30,6 +30,7 @@ conn.autocommit = True
 
 def init_db():
     with conn.cursor() as cur:
+        # Tabla de participantes
         cur.execute("""
             CREATE TABLE IF NOT EXISTS participants (
                 id TEXT PRIMARY KEY,
@@ -40,6 +41,35 @@ def init_db():
                 logros JSONB DEFAULT '[]'
             )
         """)
+        # Tabla de chistes
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS jokes (
+                id SERIAL PRIMARY KEY,
+                joke_text TEXT NOT NULL
+            )
+        """)
+        # Tabla de trivias
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS trivia (
+                id SERIAL PRIMARY KEY,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                hint TEXT NOT NULL
+            )
+        """)
+        # Opcional: Cargar datos iniciales si las tablas están vacías
+        cur.execute("SELECT COUNT(*) FROM jokes")
+        joke_count = cur.fetchone()[0]
+        if joke_count == 0:
+            # Cargar chistes desde un archivo o fuente externa
+            pass  # Aquí puedes agregar código para cargar chistes iniciales
+
+        cur.execute("SELECT COUNT(*) FROM trivia")
+        trivia_count = cur.fetchone()[0]
+        if trivia_count == 0:
+            # Cargar trivias desde un archivo o fuente externa
+            pass  # Aquí puedes agregar código para cargar trivias iniciales
+
 init_db()
 
 ######################################
@@ -136,68 +166,32 @@ def award_symbolic_reward(user: discord.Member, reward: int):
 # NORMALIZACIÓN DE CADENAS
 ######################################
 def normalize_string(s):
-    return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
+    return ''.join(c for c in unicodedata.normalize('NFKD', s)
+                   if not unicodedata.combining(c)).replace(" ", "").lower()
 
 ######################################
-# CHISTES: 200 chistes originales para sacar carcajadas
+# FUNCIONES PARA CHISTES Y TRIVIAS
 ######################################
-ALL_JOKES = [
-    "¿Por qué los programadores confunden Halloween y Navidad? Porque OCT 31 == DEC 25.",
-    "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
-    # ... (resto de los chistes)
-    "¿Qué dijo el frijol a la lenteja? ¡Juntos somos la chispa de la comida!",
-    "¿Por qué la paella fue a la fiesta? Porque sabía mezclar a todos con sabor.",
-    "¿Qué hace una crema batida en el postre? Añade el toque final de dulzura.",
-    "¿Por qué el zumo se sentía fresco? Porque siempre exprimía la risa.",
-    "¿Qué dijo el té helado al verano? ¡Refresca mi humor!",
-    "¿Por qué el chocolate caliente se abrazó? Porque derritía corazones.",
-    "¿Qué hace una bebida en la fiesta? Brinda momentos de alegría.",
-    "¿Por qué el licor se volvió poeta? Porque embriagaba de sentimientos.",
-    "¿Qué dijo el cóctel a la fiesta? ¡Soy la mezcla perfecta de diversión!",
-    "¿Por qué la soda se rió a carcajadas? Porque burbujeaba de felicidad.",
-    "¿Qué hace una cerveza en el bar? Sirve risas en cada sorbo.",
-    "¿Por qué el vino era tan elegante? Porque siempre brindaba por la vida.",
-    "¿Qué dijo el champán en la celebración? ¡Burbujas de alegría para todos!",
-    "¿Por qué el refresco se sintió animado? Porque siempre tenía chispa.",
-    "¿Qué hace una limonada en el verano? Exprime el sol y la risa.",
-    "¿Por qué el zumo de naranja fue invitado a la fiesta? Porque sabía dar vitamina de humor.",
-    "¿Qué dijo el agua mineral al agitarse? ¡Siempre refresco el ambiente!",
-    "¿Por qué el té de hierbas se volvió famoso? Porque tenía la receta de la calma y la risa.",
-    "¿Qué hace una infusión en la tarde? Endulza los momentos con humor.",
-    "¿Por qué la mermelada se sentía especial? Porque endulzaba cada día.",
-    "¿Qué dijo el pan tostado al aguacate? ¡Juntos somos la tendencia del desayuno!",
-    "¿Por qué el cereal se reía en la mañana? Porque siempre traía buen grano de humor.",
-    "¿Qué hace una avena en el desayuno? Nutre el cuerpo y alegra el alma."
-]
-unused_jokes = ALL_JOKES.copy()
-
 def get_random_joke():
-    global unused_jokes, ALL_JOKES
-    if not unused_jokes:
-        unused_jokes = ALL_JOKES.copy()
-    joke = random.choice(unused_jokes)
-    unused_jokes.remove(joke)
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM jokes")
+        joke_ids = [row[0] for row in cur.fetchall()]
+    if not joke_ids:
+        return "No hay chistes disponibles."
+    joke_id = random.choice(joke_ids)
+    with conn.cursor() as cur:
+        cur.execute("SELECT joke_text FROM jokes WHERE id = %s", (joke_id,))
+        joke = cur.fetchone()[0]
     return joke
 
-######################################
-# TRIVIA: 200 preguntas de cultura general
-######################################
-ALL_TRIVIA = [
-    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez", "hint": "Su nombre comienza con 'G'."},
-    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas", "hint": "Está en América del Sur y su nombre comienza con 'A'."},
-    {"question": "¿En qué año llegó el hombre a la Luna?", "answer": "1969", "hint": "A finales de los años 60."},
-    {"question": "¿Cuál es el planeta más cercano al Sol?", "answer": "mercurio", "hint": "Es el primer planeta del sistema solar."},
-    {"question": "¿En qué año se celebró la primera Copa del Mundo de Fútbol?", "answer": "1930", "hint": "A principios de los años 30."}
-]
-unused_trivia = ALL_TRIVIA.copy()
-
 def get_random_trivia():
-    global unused_trivia, ALL_TRIVIA
-    if not unused_trivia:
-        unused_trivia = ALL_TRIVIA.copy()
-    trivia = random.choice(unused_trivia)
-    unused_trivia.remove(trivia)
-    return trivia
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM trivia")
+        trivia_list = cur.fetchall()
+    if not trivia_list:
+        return None
+    trivia_item = random.choice(trivia_list)
+    return trivia_item  # Retorna un diccionario con keys: 'id', 'question', 'answer', 'hint'
 
 ######################################
 # INICIALIZACIÓN DEL BOT
@@ -252,7 +246,8 @@ def api_update_points():
     except Exception as e:
         return jsonify({"error": "Member not found", "details": str(e)}), 404
     new_points = update_score(member, points)
-    bot.loop.create_task(send_public_message(f"✅ API: Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos"))
+    bot.loop.create_task(send_public_message(
+        f"✅ API: Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos"))
     return jsonify({"message": "Puntuación actualizada", "new_points": new_points}), 200
 
 @app.route("/api/delete_member", methods=["POST"])
@@ -277,7 +272,8 @@ def api_delete_member():
         return jsonify({"error": "Member not found", "details": str(e)}), 404
     with conn.cursor() as cur:
         cur.execute("DELETE FROM participants WHERE id = %s", (str(member.id),))
-    bot.loop.create_task(send_public_message(f"✅ API: {member.display_name} eliminado del torneo"))
+    bot.loop.create_task(send_public_message(
+        f"✅ API: {member.display_name} eliminado del torneo"))
     return jsonify({"message": "Miembro eliminado"}), 200
 
 @app.route("/api/set_stage", methods=["POST"])
@@ -364,7 +360,8 @@ async def ver_puntuacion(ctx):
 @bot.command()
 async def clasificacion(ctx):
     data = get_all_participants()
-    sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+    sorted_players = sorted(data["participants"].items(), key=lambda item: int(
+        item[1].get("puntos", 0)), reverse=True)
     ranking = "🏅 Clasificación del Torneo:\n"
     for idx, (uid, player) in enumerate(sorted_players, 1):
         ranking += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
@@ -381,7 +378,8 @@ async def avanzar_etapa(ctx):
     global current_stage
     current_stage += 1
     data = get_all_participants()
-    sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+    sorted_players = sorted(data["participants"].items(), key=lambda item: int(
+        item[1].get("puntos", 0)), reverse=True)
     cutoff = STAGES.get(current_stage)
     if cutoff is None:
         await send_public_message("No hay configuración para esta etapa.")
@@ -495,10 +493,10 @@ async def trivia(ctx):
         except:
             pass
         return
-    if ctx.channel.id in active_trivia:
-        await ctx.send("Ya hay una trivia activa en este canal.")
-        return
     trivia_item = get_random_trivia()
+    if trivia_item is None:
+        await ctx.send("No hay trivias disponibles.")
+        return
     active_trivia[ctx.channel.id] = trivia_item
     await ctx.send(f"**Trivia:** {trivia_item['question']}\n_Responde en el chat._")
     try:
@@ -534,13 +532,15 @@ async def on_message(message):
     global stage_names, current_stage, active_trivia
 
     def normalize_string_local(s):
-        return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
+        return ''.join(c for c in unicodedata.normalize('NFKD', s)
+                       if not unicodedata.combining(c)).replace(" ", "").lower()
 
     content = message.content.strip().lower()
 
     if content == "ranking":
         data = get_all_participants()
-        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+        sorted_players = sorted(data["participants"].items(), key=lambda item: int(
+            item[1].get("puntos", 0)), reverse=True)
         user_id = str(message.author.id)
         found = False
         user_rank = 0
@@ -559,7 +559,8 @@ async def on_message(message):
 
     if content == "topmejores":
         data = get_all_participants()
-        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+        sorted_players = sorted(data["participants"].items(), key=lambda item: int(
+            item[1].get("puntos", 0)), reverse=True)
         stage_name = stage_names.get(current_stage, f"Etapa {current_stage}")
         ranking_text = f"🏅 Top 10 Mejores de {stage_name}:\n"
         for idx, (uid, player) in enumerate(sorted_players[:10], 1):
@@ -569,7 +570,8 @@ async def on_message(message):
 
     if content == "topestrellas":
         data = get_all_participants()
-        sorted_by_symbolic = sorted(data["participants"].items(), key=lambda item: int(item[1].get("symbolic", 0)), reverse=True)
+        sorted_by_symbolic = sorted(data["participants"].items(), key=lambda item: int(
+            item[1].get("symbolic", 0)), reverse=True)
         ranking_text = "🌟 Top 10 Estrellas Simbólicas:\n"
         for idx, (uid, player) in enumerate(sorted_by_symbolic[:10], 1):
             ranking_text += f"{idx}. {player['nombre']} - {player.get('symbolic', 0)} estrellas\n"
@@ -622,11 +624,13 @@ async def on_message(message):
         return
 
     if any(phrase in content for phrase in ["quiero jugar trivia", "jugar trivia", "trivia"]):
-        if message.channel.id not in active_trivia:
-            trivia_item = get_random_trivia()
-            active_trivia[message.channel.id] = trivia_item
-            await message.channel.send(f"**Trivia:** {trivia_item['question']}\n_Responde en el chat._")
+        trivia_item = get_random_trivia()
+        if trivia_item is None:
+            await message.channel.send("No hay trivias disponibles.")
             return
+        active_trivia[message.channel.id] = trivia_item
+        await message.channel.send(f"**Trivia:** {trivia_item['question']}\n_Responde en el chat._")
+        return
 
     # Manejo de respuestas de trivia
     if message.channel.id in active_trivia:
