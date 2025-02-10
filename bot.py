@@ -9,6 +9,7 @@ import re
 import threading
 import unicodedata
 import asyncio  # Para usar asyncio.sleep
+import datetime  # Para gestionar fechas y tiempos
 from flask import Flask, request, jsonify
 
 ######################################
@@ -17,7 +18,7 @@ from flask import Flask, request, jsonify
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles (no se utiliza en la versión final)
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles
-SPECIAL_HELP_CHANNEL = 1337708244327596123  # Canal especial para que el owner reciba la lista extendida de comandos
+SPECIAL_HELP_CHANNEL = 1338608387197243422  # Canal especial para que el owner reciba la lista extendida de comandos
 GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
 
 API_SECRET = os.environ.get("API_SECRET")  # Para la API privada (opcional)
@@ -48,15 +49,24 @@ init_db()
 ######################################
 PREFIX = '!'
 # Configuración de etapas: cada etapa tiene un número determinado de jugadores.
-STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}
+# Se agregan las etapas 7 y 8. (Recordá: ahora la etapa 7 se llamará "FALTA ESCOGER OBJETOS" y la etapa 8 "FIN")
+STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14, 6: 1, 7: 1, 8: 1}
 current_stage = 1
 stage_names = {
     1: "Battle Royale",
     2: "Snipers vs Runners",
     3: "Boxfight duos",
     4: "Pescadito dice",
-    5: "Gran Final"
+    5: "Gran Final",
+    6: "CAMPEON",
+    7: "FALTA ESCOGER OBJETOS",
+    8: "FIN"
 }
+
+# Variables para gestionar el reenvío de mensajes del campeón
+champion_id = None
+forwarding_enabled = False
+forwarding_end_time = None
 
 ######################################
 # VARIABLE GLOBAL PARA TRIVIA
@@ -351,14 +361,17 @@ async def avanzar_etapa(ctx):
         except:
             pass
         return
-    global current_stage
+    global current_stage, champion_id, forwarding_enabled, forwarding_end_time
     current_stage += 1
     data = get_all_participants()
     sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
     cutoff = STAGES.get(current_stage)
     if cutoff is None:
         await send_public_message("No hay configuración para esta etapa.")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         return
     avanzan = sorted_players[:cutoff]
     eliminados = sorted_players[cutoff:]
@@ -367,7 +380,24 @@ async def avanzar_etapa(ctx):
         upsert_participant(uid, player)
         try:
             member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
-            await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
+            if current_stage == 6:
+                msg = (f"🏆 ¡Enhorabuena {member.display_name}! Has sido coronado como el CAMPEON del torneo. "
+                       f"Además, has ganado 2800 paVos, que serán entregados en forma de regalos de la tienda de objetos de Fortnite. "
+                       f"Puedes escoger los objetos que desees de la tienda, siempre que el valor total de ellos sume 2800. "
+                       f"Por favor, escribe en este chat el nombre de los objetos que has escogido (tal como aparecen en la tienda de objetos de Fortnite).")
+                champion_id = member.id
+                forwarding_enabled = True
+                forwarding_end_time = None
+            elif current_stage == 7:
+                msg = f"❗ Aún te faltan escoger objetos. Por favor, escribe tus objetos escogidos. 😕"
+                forwarding_enabled = False
+            elif current_stage == 8:
+                msg = f"✅ Tus objetos han sido entregados, muchas gracias por participar, nos vemos pronto. 🙌"
+                forwarding_enabled = True
+                forwarding_end_time = datetime.datetime.utcnow() + datetime.timedelta(days=2)
+            else:
+                msg = f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))})."
+            await member.send(msg)
             await asyncio.sleep(1)  # Pausa para evitar demasiadas solicitudes en poco tiempo
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
@@ -422,19 +452,28 @@ async def eliminar_jugador(ctx, jugador: str):
     match = re.search(r'\d+', jugador)
     if not match:
         await send_public_message("No se pudo encontrar al miembro.")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         return
     member_id = int(match.group())
     guild = ctx.guild or bot.get_guild(GUILD_ID)
     if guild is None:
         await send_public_message("No se pudo determinar el servidor.")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         return
     try:
         member = guild.get_member(member_id) or await guild.fetch_member(member_id)
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro en el servidor.")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         return
     user_id = str(member.id)
     with conn.cursor() as cur:
@@ -456,6 +495,51 @@ async def configurar_etapa(ctx, etapa: int):
     global current_stage
     current_stage = etapa
     await send_public_message(f"✅ Etapa actual configurada a {etapa}")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+# Nuevo comando para saltar a la etapa que se desee
+@bot.command()
+async def saltar_etapa(ctx, etapa: int):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    global current_stage, champion_id, forwarding_enabled, forwarding_end_time
+    current_stage = etapa
+    data = get_all_participants()
+    sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
+    if sorted_players:
+        champ_uid, champ_player = sorted_players[0]
+        try:
+            guild = ctx.guild or bot.get_guild(GUILD_ID)
+            champion = guild.get_member(int(champ_uid)) or await guild.fetch_member(int(champ_uid))
+        except Exception as e:
+            champion = None
+        if champion:
+            if current_stage == 6:
+                msg = (f"🏆 ¡Enhorabuena {champion.display_name}! Has sido coronado como el CAMPEON del torneo. "
+                       f"Además, has ganado 2800 paVos, que serán entregados en forma de regalos de la tienda de objetos de Fortnite. "
+                       f"Puedes escoger los objetos que desees de la tienda, siempre que el valor total de ellos sume 2800. "
+                       f"Por favor, escribe en este chat el nombre de los objetos que has escogido (tal como aparecen en la tienda de objetos de Fortnite).")
+                champion_id = champion.id
+                forwarding_enabled = True
+                forwarding_end_time = None
+                await champion.send(msg)
+            elif current_stage == 7:
+                msg = f"❗ Aún te faltan escoger objetos. Por favor, escribe tus objetos escogidos. 😕"
+                forwarding_enabled = False
+                await champion.send(msg)
+            elif current_stage == 8:
+                msg = f"✅ Tus objetos han sido entregados, muchas gracias por participar, nos vemos pronto. 🙌"
+                forwarding_enabled = True
+                forwarding_end_time = datetime.datetime.utcnow() + datetime.timedelta(days=2)
+                await champion.send(msg)
+    await send_public_message(f"✅ Etapa saltada. Ahora la etapa es {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
     try:
         await ctx.message.delete()
     except:
@@ -485,11 +569,23 @@ async def chiste(ctx):
     await ctx.send(get_random_joke())
 
 ######################################
-# EVENTO ON_MESSAGE: Comandos de Lenguaje Natural
+# EVENTO ON_MESSAGE: Comandos de Lenguaje Natural y reenvío de DMs del campeón
 ######################################
 @bot.event
 async def on_message(message):
-    # Si el mensaje comienza con "!" y el autor no es el propietario, se borra sin respuesta.
+    # Si el mensaje proviene de un DM y es del campeón, y el reenvío está habilitado, reenvía el mensaje al canal 1338610365327474690
+    if message.guild is None and champion_id is not None and message.author.id == champion_id and forwarding_enabled:
+        if forwarding_end_time is not None and datetime.datetime.utcnow() > forwarding_end_time:
+            global forwarding_enabled
+            forwarding_enabled = False
+        else:
+            try:
+                forward_channel = bot.get_channel(1338610365327474690)
+                if forward_channel:
+                    await forward_channel.send(f"**Mensaje del Campeón:** {message.content}")
+            except Exception as e:
+                print(f"Error forwarding message: {e}")
+    # Procesa los comandos en mensajes que comiencen con "!" según la lógica existente
     if message.content.startswith("!") and message.author.id != OWNER_ID:
         try:
             await message.delete()
@@ -497,7 +593,6 @@ async def on_message(message):
             pass
         return
 
-    # Si el mensaje comienza con "!" y es del propietario, se procesa como comando sensible.
     if message.content.startswith("!") and message.author.id == OWNER_ID:
         await bot.process_commands(message)
         return
@@ -576,6 +671,7 @@ async def on_message(message):
                 "   - **!retroceder_etapa:** Retrocede a la etapa anterior del torneo.\n"
                 "   - **!eliminar_jugador [jugador]:** Elimina a un jugador del torneo.\n"
                 "   - **!configurar_etapa [etapa]:** Configura manualmente la etapa actual del torneo.\n"
+                "   - **!saltar_etapa [etapa]:** Salta directamente a la etapa indicada.\n"
             )
         await message.channel.send(help_text)
         return
