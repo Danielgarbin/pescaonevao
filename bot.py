@@ -139,8 +139,7 @@ def normalize_string(s):
 ######################################
 # CHISTES: 170 chistes (los mejores que jamás he creado)
 ######################################
-# Aquí se definen 170 chistes divididos en 3 bloques.
-# Reemplaza o completa estos ejemplos con tus chistes finales.
+# Aquí se incluyen 170 chistes. Reemplaza o completa estos bloques con tus chistes definitivos.
 ALL_JOKES = [
     # Bloque 1: 70 chistes originales
     "¿Por qué el sol nunca se cansa? Porque siempre brilla con energía.",
@@ -177,7 +176,7 @@ ALL_JOKES = [
     "¿Por qué el viento es un gran amigo? Porque siempre sopla contigo.",
     "¿Qué hace una mariposa en el gimnasio? ¡Vuela alto en la pista!",
     "¿Cómo se llama el rey de los chistes malos? ¡El chistocrata!",
-    "¿Qué hace un globo en una fiesta? Se infla de alegría.",
+    "¿Qué hace un globo en una fiesta? Se infla de alegría!",
     "¿Por qué la araña es tan creativa? Porque siempre teje nuevas ideas.",
     "¿Qué le dice el queso a la galleta? ¡Juntos somos el snack perfecto!",
     "¿Por qué el cartero nunca se retrasa? Porque siempre entrega a tiempo.",
@@ -238,7 +237,7 @@ ALL_JOKES = [
     "¿Por qué el teclado se volvió romántico? Porque encontró las teclas de su corazón.",
     "¿Qué hace un cuadro en un museo? Se queda enmarcado en sus pensamientos.",
     "¿Por qué el sombrero es tan humilde? Porque siempre se inclina ante la moda.",
-    # Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
+    # Bloque 3: 50 chistes nuevos
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo con fuerza.",
     "¿Qué hace un pez en el ordenador? Nada en la red con estilo.",
     "¿Por qué los fantasmas no pueden mentir? Porque su verdad se les ve a través.",
@@ -351,7 +350,7 @@ def check_auth(req):
         return False
     return True
 
-@app.route("/")
+@app.route("/", endpoint="root")
 def home():
     return "El bot está funcionando!", 200
 
@@ -744,7 +743,7 @@ async def on_ready():
 ######################################
 # SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (API PRIVADA)
 ######################################
-@app.route("/")
+@app.route("/", endpoint="root")
 def home():
     return "El bot está funcionando!", 200
 
