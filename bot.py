@@ -1,7 +1,6 @@
 import discord
 import psycopg2
 import psycopg2.extras
-import asyncio
 from discord.ext import commands
 import json
 import random
@@ -9,6 +8,7 @@ import os
 import re
 import threading
 import unicodedata
+import asyncio
 from flask import Flask, request, jsonify
 
 ######################################
@@ -58,19 +58,8 @@ def init_db():
                 hint TEXT NOT NULL
             )
         """)
-        # Opcional: Cargar datos iniciales si las tablas están vacías
-        cur.execute("SELECT COUNT(*) FROM jokes")
-        joke_count = cur.fetchone()[0]
-        if joke_count == 0:
-            # Cargar chistes desde un archivo o fuente externa
-            pass  # Aquí puedes agregar código para cargar chistes iniciales
-
-        cur.execute("SELECT COUNT(*) FROM trivia")
-        trivia_count = cur.fetchone()[0]
-        if trivia_count == 0:
-            # Cargar trivias desde un archivo o fuente externa
-            pass  # Aquí puedes agregar código para cargar trivias iniciales
-
+        # Opcional: Aquí puedes cargar datos iniciales si las tablas están vacías
+        # Puedes eliminar estas secciones si ya cargaste los datos usando el script separado
 init_db()
 
 ######################################
@@ -485,30 +474,6 @@ async def configurar_etapa(ctx, etapa: int):
     except:
         pass
 
-# Comando !trivia (disponible para el owner; los demás inician trivia por lenguaje natural)
-@bot.command()
-async def trivia(ctx):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    trivia_item = get_random_trivia()
-    if trivia_item is None:
-        await ctx.send("No hay trivias disponibles.")
-        return
-    active_trivia[ctx.channel.id] = trivia_item
-    await ctx.send(f"**Trivia:** {trivia_item['question']}\n_Responde en el chat._")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-@bot.command()
-async def chiste(ctx):
-    await ctx.send(get_random_joke())
-
 ######################################
 # COMANDOS DE ADMINISTRACIÓN PARA CHISTES Y TRIVIAS
 ######################################
@@ -628,6 +593,96 @@ async def listar_trivias(ctx):
         await ctx.send(chunk)
 
 ######################################
+# COMANDOS PARA AGREGAR CHISTES Y TRIVIAS EN MASA
+######################################
+
+@bot.command()
+async def agregar_chistes_masa(ctx):
+    if not is_owner_dm(ctx):
+        # Si no es el OWNER o no es un DM, ignoramos y borramos el mensaje si es posible
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    await ctx.send("Por favor, envía todos los chistes que deseas agregar, cada uno en una línea separada. Cuando termines, escribe `FIN`.")
+
+    def check(m):
+        return m.author.id == OWNER_ID and isinstance(m.channel, discord.DMChannel)
+
+    jokes = []
+    while True:
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=300)  # Espera hasta 5 minutos
+            if msg.content.strip().upper() == 'FIN':
+                break
+            else:
+                # Dividimos el mensaje en líneas si es que enviaste varios chistes juntos
+                lines = msg.content.strip().split('\n')
+                jokes.extend([line.strip() for line in lines if line.strip()])
+        except asyncio.TimeoutError:
+            await ctx.send("⏰ Tiempo de espera excedido. Por favor, intenta nuevamente.")
+            return
+    if jokes:
+        # Insertar los chistes en la base de datos
+        with conn.cursor() as cur:
+            for joke in jokes:
+                cur.execute("INSERT INTO jokes (joke_text) VALUES (%s)", (joke,))
+        await ctx.send(f"✅ Se han agregado {len(jokes)} chistes exitosamente.")
+    else:
+        await ctx.send("No se agregaron chistes.")
+
+@bot.command()
+async def agregar_trivias_masa(ctx):
+    if not is_owner_dm(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    await ctx.send("Por favor, envía las trivias que deseas agregar en el siguiente formato:\n`Pregunta::Respuesta::Pista`\nEnvía una trivia por línea. Cuando termines, escribe `FIN`.")
+
+    def check(m):
+        return m.author.id == OWNER_ID and isinstance(m.channel, discord.DMChannel)
+
+    trivia_list = []
+    while True:
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=600)  # Espera hasta 10 minutos
+            if msg.content.strip().upper() == 'FIN':
+                break
+            else:
+                lines = msg.content.strip().split('\n')
+                for line in lines:
+                    parts = line.strip().split("::")
+                    if len(parts) != 3:
+                        await ctx.send(f"Formato incorrecto en línea:\n`{line}`\nAsegúrate de usar `Pregunta::Respuesta::Pista`.")
+                        continue
+                    question, answer, hint = parts
+                    trivia_list.append({'question': question.strip(), 'answer': answer.strip(), 'hint': hint.strip()})
+        except asyncio.TimeoutError:
+            await ctx.send("⏰ Tiempo de espera excedido. Por favor, intenta nuevamente.")
+            return
+    if trivia_list:
+        # Insertar las trivias en la base de datos
+        with conn.cursor() as cur:
+            for trivia in trivia_list:
+                cur.execute("""
+                    INSERT INTO trivia (question, answer, hint)
+                    VALUES (%s, %s, %s)
+                """, (trivia['question'], trivia['answer'], trivia['hint']))
+        await ctx.send(f"✅ Se han agregado {len(trivia_list)} trivias exitosamente.")
+    else:
+        await ctx.send("No se agregaron trivias.")
+
+######################################
+# COMANDO CHISTE
+######################################
+@bot.command()
+async def chiste(ctx):
+    await ctx.send(get_random_joke())
+
+######################################
 # EVENTO ON_MESSAGE: Comandos de Lenguaje Natural
 ######################################
 @bot.event
@@ -723,6 +778,14 @@ async def on_message(message):
                 "   - **!retroceder_etapa:** Retrocede a la etapa anterior del torneo.\n"
                 "   - **!eliminar_jugador [jugador]:** Elimina a un jugador del torneo.\n"
                 "   - **!configurar_etapa [etapa]:** Configura manualmente la etapa actual del torneo.\n"
+                "   - **!agregar_chiste [chiste]:** Agrega un nuevo chiste a la base de datos.\n"
+                "   - **!eliminar_chiste [id]:** Elimina el chiste con el ID proporcionado.\n"
+                "   - **!listar_chistes:** Lista todos los chistes almacenados.\n"
+                "   - **!agregar_trivia:** Inicia el proceso para agregar una nueva trivia.\n"
+                "   - **!eliminar_trivia [id]:** Elimina la trivia con el ID proporcionado.\n"
+                "   - **!listar_trivias:** Lista todas las trivias almacenadas.\n"
+                "   - **!agregar_chistes_masa:** Permite agregar múltiples chistes en masa.\n"
+                "   - **!agregar_trivias_masa:** Permite agregar múltiples trivias en masa.\n"
             )
         await message.channel.send(help_text)
         return
