@@ -139,7 +139,8 @@ def normalize_string(s):
 ######################################
 # CHISTES: 170 chistes (los mejores que jamás he creado)
 ######################################
-# Aquí se incluyen 170 chistes. Reemplaza o completa estos bloques con tus chistes definitivos.
+# Aquí se incluyen 170 chistes divididos en 3 bloques.
+# Completa o reemplaza estos bloques con tus chistes definitivos.
 ALL_JOKES = [
     # Bloque 1: 70 chistes originales
     "¿Por qué el sol nunca se cansa? Porque siempre brilla con energía.",
@@ -237,7 +238,7 @@ ALL_JOKES = [
     "¿Por qué el teclado se volvió romántico? Porque encontró las teclas de su corazón.",
     "¿Qué hace un cuadro en un museo? Se queda enmarcado en sus pensamientos.",
     "¿Por qué el sombrero es tan humilde? Porque siempre se inclina ante la moda.",
-    # Bloque 3: 50 chistes nuevos
+    # Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo con fuerza.",
     "¿Qué hace un pez en el ordenador? Nada en la red con estilo.",
     "¿Por qué los fantasmas no pueden mentir? Porque su verdad se les ve a través.",
@@ -751,9 +752,6 @@ def run_webserver():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
-threading.Thread(target=run_webserver).start()
-
-######################################
-# INICIAR EL BOT
-######################################
-bot.run(os.getenv('DISCORD_TOKEN'))
+if __name__ == '__main__':
+    threading.Thread(target=run_webserver).start()
+    bot.run(os.getenv('DISCORD_TOKEN'))
