@@ -274,8 +274,13 @@ def api_set_stage():
         stage = int(data["stage"])
     except ValueError:
         return jsonify({"error": "Invalid stage"}), 400
-    global current_stage
+    global current_stage, champion_id, forwarding_enabled, forwarding_end_time
     current_stage = stage
+    # Si la nueva etapa no es 6, 7 ni 8 se desactivan los reenvíos
+    if current_stage not in [6,7,8]:
+        champion_id = None
+        forwarding_enabled = False
+        forwarding_end_time = None
     bot.loop.create_task(send_public_message(f"✅ API: Etapa actual configurada a {stage}"))
     return jsonify({"message": "Etapa configurada", "stage": stage}), 200
 
@@ -293,13 +298,19 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
     match = re.search(r'\d+', jugador)
     if not match:
         await send_public_message("No se pudo encontrar al miembro.")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         return
     member_id = int(match.group())
     guild = ctx.guild or bot.get_guild(GUILD_ID)
     if guild is None:
         await send_public_message("No se pudo determinar el servidor.")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         return
     try:
         member = guild.get_member(member_id)
@@ -307,13 +318,19 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
             member = await guild.fetch_member(member_id)
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro en el servidor.")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         return
     try:
         puntos = int(puntos)
     except ValueError:
         await send_public_message("Por favor, proporciona un número válido de puntos.")
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except:
+            pass
         return
     new_points = update_score(member, puntos)
     await send_public_message(f"✅ Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos")
@@ -390,13 +407,19 @@ async def avanzar_etapa(ctx):
                 forwarding_end_time = None
             elif current_stage == 7:
                 msg = f"❗ Aún te faltan escoger objetos. Por favor, escribe tus objetos escogidos. 😕"
-                forwarding_enabled = False
+                champion_id = member.id
+                forwarding_enabled = True
+                forwarding_end_time = None
             elif current_stage == 8:
                 msg = f"✅ Tus objetos han sido entregados, muchas gracias por participar, nos vemos pronto. 🙌"
+                champion_id = member.id
                 forwarding_enabled = True
                 forwarding_end_time = datetime.datetime.utcnow() + datetime.timedelta(days=2)
             else:
                 msg = f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))})."
+                champion_id = None
+                forwarding_enabled = False
+                forwarding_end_time = None
             await member.send(msg)
             await asyncio.sleep(1)  # Pausa para evitar demasiadas solicitudes en poco tiempo
         except Exception as e:
@@ -405,7 +428,7 @@ async def avanzar_etapa(ctx):
         try:
             member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
             await member.send(f"❌ Lo siento, has sido eliminado del torneo en la etapa {current_stage - 1}.")
-            await asyncio.sleep(1)  # Pausa para evitar demasiadas solicitudes en poco tiempo
+            await asyncio.sleep(1)
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
     await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron y {len(eliminados)} fueron eliminados.")
@@ -422,7 +445,7 @@ async def retroceder_etapa(ctx):
         except:
             pass
         return
-    global current_stage
+    global current_stage, champion_id, forwarding_enabled, forwarding_end_time
     if current_stage <= 1:
         await send_public_message("No se puede retroceder de la etapa 1.")
         try:
@@ -435,6 +458,11 @@ async def retroceder_etapa(ctx):
     for uid, player in data["participants"].items():
         player["etapa"] = current_stage
         upsert_participant(uid, player)
+    # Si la nueva etapa NO es 6, 7 ni 8, se desactivan los reenvíos
+    if current_stage not in [6,7,8]:
+        champion_id = None
+        forwarding_enabled = False
+        forwarding_end_time = None
     await send_public_message(f"✅ Etapa retrocedida. Ahora la etapa es {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
     try:
         await ctx.message.delete()
@@ -492,15 +520,20 @@ async def configurar_etapa(ctx, etapa: int):
         except:
             pass
         return
-    global current_stage
+    global current_stage, champion_id, forwarding_enabled, forwarding_end_time
     current_stage = etapa
+    # Si la nueva etapa no es 6, 7 ni 8 se desactivan los reenvíos
+    if current_stage not in [6,7,8]:
+        champion_id = None
+        forwarding_enabled = False
+        forwarding_end_time = None
     await send_public_message(f"✅ Etapa actual configurada a {etapa}")
     try:
         await ctx.message.delete()
     except:
         pass
 
-# Nuevo comando para saltar a la etapa que se desee
+# Nuevo comando para saltar a la etapa deseada
 @bot.command()
 async def saltar_etapa(ctx, etapa: int):
     if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
@@ -532,13 +565,20 @@ async def saltar_etapa(ctx, etapa: int):
                 await champion.send(msg)
             elif current_stage == 7:
                 msg = f"❗ Aún te faltan escoger objetos. Por favor, escribe tus objetos escogidos. 😕"
-                forwarding_enabled = False
+                champion_id = champion.id
+                forwarding_enabled = True
+                forwarding_end_time = None
                 await champion.send(msg)
             elif current_stage == 8:
                 msg = f"✅ Tus objetos han sido entregados, muchas gracias por participar, nos vemos pronto. 🙌"
+                champion_id = champion.id
                 forwarding_enabled = True
                 forwarding_end_time = datetime.datetime.utcnow() + datetime.timedelta(days=2)
                 await champion.send(msg)
+            else:
+                champion_id = None
+                forwarding_enabled = False
+                forwarding_end_time = None
     await send_public_message(f"✅ Etapa saltada. Ahora la etapa es {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
     try:
         await ctx.message.delete()
@@ -573,7 +613,7 @@ async def chiste(ctx):
 ######################################
 @bot.event
 async def on_message(message):
-    # Si el mensaje proviene de un DM y es del campeón, y el reenvío está habilitado, reenvía el mensaje al canal 1338610365327474690
+    # Si el mensaje proviene de un DM y es del campeón y estamos en etapa 6, 7 o 8, se reenvía al canal 1338610365327474690
     if message.guild is None and champion_id is not None and message.author.id == champion_id and forwarding_enabled:
         if forwarding_end_time is not None and datetime.datetime.utcnow() > forwarding_end_time:
             global forwarding_enabled
@@ -659,8 +699,8 @@ async def on_message(message):
             "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras; si ganas, ganas 1 estrella simbólica.\n"
             "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes; el ganador gana 1 estrella simbólica.\n"
         )
-        # Si el autor es el owner y lo escribe en el canal especial, se agregan además los comandos sensibles.
-        if message.author.id == OWNER_ID and message.channel.id == SPECIAL_HELP_CHANNEL:
+        # Ahora, si el autor es el OWNER_ID, se agregan también los comandos sensibles.
+        if message.author.id == OWNER_ID:
             help_text += "\n**Comandos Sensibles (!):**\n"
             help_text += (
                 "   - **!actualizar_puntuacion [jugador] [puntos]:** Actualiza la puntuación de un jugador.\n"
@@ -692,7 +732,6 @@ async def on_message(message):
         return
 
     # --- MODIFICACIÓN PARA TRIVIA ---
-    # Si se invoca el comando de trivia (con cualquiera de las frases indicadas), se inicia una nueva trivia
     if any(phrase in content for phrase in ["quiero jugar trivia", "jugar trivia", "trivia"]):
         trivia_item = get_random_trivia()
         active_trivia[message.channel.id] = trivia_item
@@ -700,7 +739,6 @@ async def on_message(message):
         return
     # ---------------------------------
 
-    # Si hay una trivia activa en el canal, primero revisamos si se pidió ayuda y luego si la respuesta es correcta
     if message.channel.id in active_trivia:
         trivia_item = active_trivia[message.channel.id]
         normalized_msg = normalize_string_local(message.content.strip())
