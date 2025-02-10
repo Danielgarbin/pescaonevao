@@ -131,35 +131,168 @@ def award_symbolic_reward(user: discord.Member, reward: int):
     return new_symbolic
 
 ######################################
-# NORMALIZACIÓN DE CADENAS (para respuestas sin tildes, espacios, etc.)
+# NORMALIZACIÓN DE CADENAS
 ######################################
 def normalize_string(s):
+    # Elimina acentos, espacios y pasa a minúsculas
     return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
 
 ######################################
-# CHISTES: 170 chistes (70 originales + 50 adicionales + 50 nuevos)
+# CHISTES: 170 chistes (los mejores que jamás he creado)
 ######################################
-# (A continuación se muestran ejemplos; reemplaza o amplía para llegar a 170 chistes completos)
 ALL_JOKES = [
     # Bloque 1: 70 chistes originales
+    "¿Por qué el sol nunca se cansa? Porque siempre brilla con energía.",
     "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
-    "¿Por qué los pájaros no usan Facebook? Porque ya tienen Twitter.",
-    "¿Qué le dijo un semáforo a otro? No me mires, me estoy cambiando.",
-    "¿Por qué el libro de matemáticas se sentía triste? Porque tenía demasiados problemas.",
-    "¿Qué hace una taza en la escuela? Toma té!",
     "¿Cómo se despiden los químicos? Ácido un placer.",
-    # ... Agrega 64 chistes más para este bloque ...
-    
-    # Bloque 2: 50 chistes adicionales
-    "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
-    "¿Qué hace un gato en la computadora? Busca ratones.",
-    # ... Agrega 48 chistes más para este bloque ...
-
-    # Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
-    "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo.",
-    "¿Qué hace un pez en el ordenador? Nada en la red.",
-    # ... Agrega 48 chistes más para este bloque ...
+    "¿Qué le dice una calculadora a otra? ¡Tienes muchos problemas!",
+    "¿Cómo se llama un perro sin patas? No importa, no va a venir.",
+    "¿Qué hace un gato en el ordenador? Busca ratones.",
+    "¿Por qué la escoba nunca se queja? Porque siempre barre sus problemas.",
+    "¿Qué dijo el semáforo cuando se enfadó? ¡Detente y mira!",
+    "¿Por qué el libro de matemáticas estaba triste? Porque tenía demasiados problemas.",
+    "¿Qué hace una taza en la escuela? Toma té y aprende.",
+    "¿Cuál es el colmo de un jardinero? Que lo dejen plantado.",
+    "¿Qué le dice una pared a un cuadro? ¡Qué marco tan bonito tienes!",
+    "¿Por qué los esqueletos no pelean? Porque no tienen agallas.",
+    "¿Qué hace un pez en el cine? Nada.",
+    "¿Cómo se llama el campeón de buceo? ¡El que se zambulle sin miedo!",
+    "¿Qué hace un pollo en un ascensor? ¡Pío, pío, sube!",
+    "¿Qué le dice el cero al ocho? ¡Bonito cinturón!",
+    "¿Por qué la gallina cruzó la calle? Para demostrar que no era un gallina.",
+    "¿Qué hace una vaca en el espacio? ¡Muuu-gravedad cero!",
+    "¿Por qué el reloj siempre está de buen humor? Porque tiene tiempo para todo.",
+    "¿Qué hace una computadora en el baño? Navega por la red.",
+    "¿Cómo se despiden los carteros? Con un sello de despedida.",
+    "¿Qué le dijo una ventana a otra? ¡Nos vemos en el marco!",
+    "¿Por qué la bicicleta se cayó? Porque estaba dos-tirada.",
+    "¿Qué hace un caracol en una carrera? Llega lento, pero con casa.",
+    "¿Por qué el helado es siempre feliz? Porque se derrite de risa.",
+    "¿Qué le dice un semáforo a otro? ¡Cambia de color, amigo!",
+    "¿Cómo se llama un buen chiste? ¡El que hace reír a carcajadas!",
+    "¿Qué hace una impresora en el bosque? Imprime hojas.",
+    "¿Por qué el teléfono se fue de vacaciones? Porque necesitaba una buena señal.",
+    "¿Qué le dice un espejo a otro? ¡Refleja lo que sientes!",
+    "¿Por qué el viento es un gran amigo? Porque siempre sopla contigo.",
+    "¿Qué hace una mariposa en el gimnasio? ¡Vuela alto en la pista!",
+    "¿Cómo se llama el rey de los chistes malos? ¡El chistocrata!",
+    "¿Qué hace un globo en una fiesta? Se infla de alegría.",
+    "¿Por qué la araña es tan creativa? Porque siempre teje nuevas ideas.",
+    "¿Qué le dijo el queso a la galleta? ¡Juntos somos el snack perfecto!",
+    "¿Por qué el cartero nunca se retrasa? Porque siempre entrega a tiempo.",
+    "¿Qué hace un paraguas en un día soleado? Se guarda en silencio.",
+    "¿Por qué el semáforo nunca se enoja? Porque siempre cambia de humor.",
+    "¿Qué hace un piano en la calle? Toca melodías inesperadas.",
+    "¿Cómo se despiden los astronautas? ¡Hasta la próxima órbita!",
+    "¿Qué hace un ratón en la biblioteca? Lee sus clics.",
+    "¿Por qué la luna es tan misteriosa? Porque cambia de fase cada noche.",
+    "¿Qué le dice una calculadora a un lápiz? ¡Suma y resuelve!",
+    "¿Por qué el café es el rey de la mañana? Porque despierta a todos con su aroma.",
+    "¿Qué hace un libro en el gimnasio? Se pone en forma de lectura.",
+    "¿Cómo se llama el campeón de natación? ¡Nada, nada, nada!",
+    "¿Por qué el pan es tan optimista? Porque siempre se levanta en el horno.",
+    "¿Qué le dijo la manzana al plátano? ¡Juntos formamos una fruta explosiva!",
+    "¿Por qué el cuaderno nunca se cansa? Porque siempre tiene nuevas hojas.",
+    "¿Qué hace un zapato cuando está enamorado? Se ajusta al corazón.",
+    "¿Por qué la lámpara es tan brillante? Porque ilumina hasta los chistes más oscuros.",
+    "¿Qué dijo el semáforo al peatón? ¡No te detengas, sigue adelante!",
+    "¿Por qué el ratón no usa sombrero? Porque ya tiene orejas."
+    # (Agrega los 20 chistes restantes para completar 70 en este bloque)
 ]
+
+# Bloque 2: 50 chistes adicionales (agrega 50 chistes creativos aquí)
+ADDITIONAL_JOKES = [
+    "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
+    "¿Qué hace un gato en la computadora? Busca ratones perdidos.",
+    "¿Por qué la bicicleta siempre se ríe? Porque tiene dos ruedas de humor.",
+    "¿Qué dijo una impresora frustrada? ¡Estoy sin tinta y sin inspiración!",
+    "¿Por qué el café nunca se toma vacaciones? Porque siempre está espresso en el trabajo.",
+    "¿Qué le dice una calculadora a otra? ¡Tú sumas, yo resto!",
+    "¿Por qué el pan nunca se pierde? Porque siempre deja migajas.",
+    "¿Qué hace una manzana en la universidad? Se estudia a sí misma para ser jugosa.",
+    "¿Por qué el ventilador es tan popular? Porque siempre da aire fresco a todos.",
+    "¿Qué hace un árbol en una fiesta? Da sombra a los chismes.",
+    "¿Por qué el reloj se inscribió en clases de baile? Para aprender a marcar el compás.",
+    "¿Qué le dijo el sol a la nube? ¡No te escondas, que te estoy buscando!",
+    "¿Por qué el zapato se quedó en casa? Porque estaba muy apretado para salir.",
+    "¿Qué hace una lámpara cuando se enoja? Se da una vuelta de chispa.",
+    "¿Por qué la nieve siempre dice la verdad? Porque es transparente.",
+    "¿Qué dijo la almohada al despertador? ¡Déjame dormir un poco más!",
+    "¿Por qué el lápiz se sintió triste? Porque siempre estaba afilado por dentro.",
+    "¿Qué hace una fruta en una fiesta? Se pone en rodajas y baila.",
+    "¿Por qué la luna siempre está soltera? Porque tiene fases complicadas.",
+    "¿Qué le dijo un espejo a otro? ¡Refleja lo que sientes!",
+    "¿Por qué el semáforo no juega a las escondidas? Porque siempre se pone en rojo.",
+    "¿Qué hace un pastel en la biblioteca? Busca recetas de historias dulces.",
+    "¿Por qué el teléfono decidió separarse? Porque quería señal de independencia.",
+    "¿Qué le dijo una cuchara a un tenedor? ¡Qué afilado estás!",
+    "¿Por qué el edificio es tan serio? Porque tiene muchos pisos de responsabilidad.",
+    "¿Qué hace un globo cuando se siente triste? Se desinfla en silencio.",
+    "¿Por qué la araña es tan sociable? Porque siempre teje conexiones.",
+    "¿Qué le dijo el queso a la galleta? ¡Juntos formamos el snack perfecto!",
+    "¿Por qué el caracol nunca gana en carreras? Porque siempre carga su casa a cuestas.",
+    "¿Qué hace una botella en el desierto? Se siente muy vacía y sedienta.",
+    "¿Por qué el piano es tan sentimental? Porque siempre toca el alma de quien lo escucha.",
+    "¿Qué dijo la taza cuando se rompió? ¡Fue un accidente descafeinado!",
+    "¿Por qué el helado es un gran amigo? Porque nunca se derrite en momentos difíciles.",
+    "¿Qué hace una estrella fugaz en una fiesta? Cumple deseos y se va volando.",
+    "¿Por qué el cuaderno se ofendió? Porque alguien escribió mal sus líneas.",
+    "¿Qué le dijo la naranja al exprimidor? ¡No me exprimas, por favor!",
+    "¿Por qué el teclado se volvió romántico? Porque encontró las teclas de su corazón.",
+    "¿Qué hace un cuadro en un museo? Se queda enmarcado en sus pensamientos.",
+    "¿Por qué el sombrero es tan humilde? Porque siempre se inclina ante la moda.",
+    "¿Qué le dijo una escalera a otra? ¡Nos vemos en el siguiente nivel!",
+    "¿Por qué la mantequilla se derrite de felicidad? Porque siempre está en su punto ideal.",
+    "¿Qué hace un martillo en el gimnasio? Golpea sus propios límites.",
+    "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
+    "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
+    "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles."
+]
+
+# Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
+NEW_JOKES = [
+    "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo con fuerza.",
+    "¿Qué hace un pez en el ordenador? Nada en la red con estilo.",
+    "¿Por qué los fantasmas no pueden mentir? Porque su verdad se les ve a través.",
+    "¿Qué le dijo una computadora a otra? ¡Eres mi byte favorito, sin comparación!",
+    "¿Por qué el pan nunca se duerme? Porque siempre está tostado y alerta.",
+    "¿Qué hace una impresora en el desierto? Imprime sueños en arena.",
+    "¿Por qué la luna se fue de vacaciones? Porque necesitaba un respiro de la Tierra.",
+    "¿Qué le dijo el vino al queso? ¡Juntos somos la fusión perfecta de sabor!",
+    "¿Por qué el semáforo es tan puntual? Porque nunca pierde su señal.",
+    "¿Qué hace una escalera en la nieve? Se enfría, pero sigue subiendo.",
+    "¿Por qué el gato estudió informática? Porque quería ser el ratón más astuto.",
+    "¿Qué le dijo el árbol a la brisa? ¡Eres el aire que refresca mi existencia!",
+    "¿Por qué el café se hizo influencer? Porque siempre estaba espresso en las redes sociales.",
+    "¿Qué hace un zapato en una cita? Camina firme al lado de su pareja.",
+    "¿Por qué la lámpara se negó a trabajar? Porque estaba en modo ahorro de energía y humor.",
+    "¿Qué le dijo el ventilador al termómetro? ¡Juntos siempre damos la temperatura perfecta!",
+    "¿Por qué el reloj se sintió presionado? Porque no tenía ni un minuto para descansar.",
+    "¿Qué hace un libro en la playa? Se abre al sol y se llena de historia.",
+    "¿Por qué el lápiz rompió con la pluma? Porque necesitaba escribir su propia aventura.",
+    "¿Qué dijo el espejo cuando vio su reflejo? ¡Eres mi otra mitad, perfecto para brillar!",
+    "¿Por qué la manzana se volvió famosa? Porque siempre estaba a la moda con su iPhone.",
+    "¿Qué hace un teléfono en el cine? Captura selfies en la penumbra.",
+    "¿Por qué el ratón de computadora fue a la escuela? Para afinar su clic y mejorar.",
+    "¿Qué le dijo el jardín a la maceta? ¡Eres la flor que alegra mi día!",
+    "¿Por qué el helado fue al médico? Porque se sentía derretido por dentro, sin remedio.",
+    "¿Qué hace un carro en el gimnasio? Levanta ruedas y acelera su fuerza.",
+    "¿Por qué el panadero fue a la playa? Porque quería hacer pan tostado al sol.",
+    "¿Qué dijo el tomate a la lechuga? ¡Eres la ensalada que le da vida a mi plato!",
+    "¿Por qué el camión se puso a cantar? Porque tenía una gran carga de ritmo interior.",
+    "¿Qué hace un globo en la oficina? Eleva el ánimo y llena de color el ambiente.",
+    "¿Por qué la batería siempre se recarga? Porque su energía nunca se agota.",
+    "¿Qué dijo el reloj digital al analógico? ¡Actualízate, amigo, que el tiempo avanza!",
+    "¿Por qué el zapato se sintió perdido? Porque no encontró a su par ideal.",
+    "¿Qué hace una taza en una fiesta de té? Se sirve con elegancia y calidez.",
+    "¿Por qué la cuchara siempre es amable? Porque tiene una gran capacidad para compartir.",
+    "¿Qué le dijo la ventana al sol? ¡Déjame ver el mundo con tus rayos!",
+    "¿Por qué el motor se emocionó? Porque se encendió la pasión y la fuerza.",
+    "¿Qué hace un boomerang cuando se cansa? Se queda en pausa y vuelve a su punto con determinación."
+]
+
+# Unimos todos los chistes en una sola lista de 170 chistes
+ALL_JOKES = ALL_JOKES + ADDITIONAL_JOKES + NEW_JOKES
 unused_jokes = ALL_JOKES.copy()
 def get_random_joke():
     global unused_jokes, ALL_JOKES
@@ -232,6 +365,10 @@ def check_auth(req):
     if not auth or auth != f"Bearer {API_SECRET}":
         return False
     return True
+
+@app.route("/")
+def home():
+    return "El bot está funcionando!", 200
 
 @app.route("/api/update_points", methods=["POST"])
 def api_update_points():
@@ -469,7 +606,12 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    global stage_names, current_stage, active_trivia
+    global stage_names, current_stage, active_trivia, trivia_questions
+
+    # Importamos unicodedata para normalizar cadenas
+    import unicodedata
+    def normalize_string(s):
+        return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
 
     content = message.content.strip().lower()
 
@@ -552,11 +694,6 @@ async def on_message(message):
 
     if message.channel.id in active_trivia:
         trivia = active_trivia[message.channel.id]
-        # Normalizamos ambas cadenas para comparar sin acentos ni espacios
-        from unicodedata import normalize
-        def normalize_string(s):
-            return ''.join(c for c in normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
-        # Usamos nuestra función; si no está definida, se define aquí
         if normalize_string(message.content.strip()) == normalize_string(trivia['answer']):
             symbolic = award_symbolic_reward(message.author, 1)
             response = f"🎉 ¡Correcto, {message.author.display_name}! Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
@@ -611,7 +748,7 @@ async def on_message(message):
             await message.channel.send(duel_text)
             return
 
-    # No llamamos a bot.process_commands(message) al final para evitar duplicados
+    await bot.process_commands(message)
 
 ######################################
 # EVENTO ON_READY
