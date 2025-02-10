@@ -17,7 +17,9 @@ from flask import Flask, request, jsonify
 ######################################
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles (no se utiliza en la versión final)
-PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles (por ejemplo, para cambios en la puntuación)
+# Canal exclusivo para los nuevos comandos de administración de chistes y trivias:
+ADMIN_JT_CHANNEL_ID = 1338624226470400010
 SPECIAL_HELP_CHANNEL = 1338608387197243422  # Canal especial para que el owner reciba la lista extendida de comandos
 GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
 
@@ -92,6 +94,12 @@ forwarding_end_time = None
 # VARIABLE GLOBAL PARA TRIVIA
 ######################################
 active_trivia = {}  # key: channel.id, value: {"question": ..., "answer": ..., "hint": ...}
+
+######################################
+# VARIABLES GLOBALES PARA SELECCIÓN NO REPETITIVA DE CHISTES Y TRIVIAS
+######################################
+unused_jokes = []
+unused_trivias = []
 
 ######################################
 # FUNCIONES PARA LA BASE DE DATOS
@@ -170,25 +178,39 @@ def normalize_string(s):
     return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
 
 ######################################
-# FUNCIONES PARA CHISTES, TRIVIAS Y MEMES (USANDO LA BASE DE DATOS)
+# FUNCIONES PARA CHISTES, TRIVIAS Y MEMES (USANDO LA BASE DE DATOS) CON SELECCIÓN NO REPETITIVA
 ######################################
-def get_random_joke():
+def get_all_jokes():
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT content FROM jokes ORDER BY random() LIMIT 1")
-        result = cur.fetchone()
-        if result:
-            return result["content"]
-        else:
-            return "No hay chistes disponibles en este momento."
+         cur.execute("SELECT id, content FROM jokes")
+         return cur.fetchall()
+
+def get_random_joke():
+    global unused_jokes
+    if not unused_jokes:
+         all_jokes = get_all_jokes()
+         if not all_jokes:
+             return "No hay chistes disponibles en este momento."
+         unused_jokes = all_jokes.copy()
+    selected = random.choice(unused_jokes)
+    unused_jokes.remove(selected)
+    return selected["content"]
+
+def get_all_trivias():
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+         cur.execute("SELECT id, question, answer, hint FROM trivias")
+         return cur.fetchall()
 
 def get_random_trivia():
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT question, answer, hint FROM trivias ORDER BY random() LIMIT 1")
-        result = cur.fetchone()
-        if result:
-            return result
-        else:
-            return {"question": "No hay trivias disponibles en este momento.", "answer": "", "hint": ""}
+    global unused_trivias
+    if not unused_trivias:
+         all_trivias = get_all_trivias()
+         if not all_trivias:
+             return {"question": "No hay trivias disponibles en este momento.", "answer": "", "hint": ""}
+         unused_trivias = all_trivias.copy()
+    selected = random.choice(unused_trivias)
+    unused_trivias.remove(selected)
+    return {"question": selected["question"], "answer": selected["answer"], "hint": selected["hint"]}
 
 def get_random_meme():
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -629,10 +651,11 @@ async def chiste(ctx):
 
 ######################################
 # NUEVOS COMANDOS ADMIN PARA GESTIÓN DE CHISTES Y TRIVIAS
+# (Se validará que se ejecuten en el canal ADMIN_JT_CHANNEL_ID)
 ######################################
 @bot.command()
 async def agregar_chiste(ctx, *, chiste_text: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -649,7 +672,7 @@ async def agregar_chiste(ctx, *, chiste_text: str):
 
 @bot.command()
 async def eliminar_chiste(ctx, joke_id: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -668,7 +691,7 @@ async def eliminar_chiste(ctx, joke_id: int):
 
 @bot.command()
 async def agregar_chistes_masivos(ctx, *, chistes_text: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -689,7 +712,7 @@ async def agregar_chistes_masivos(ctx, *, chistes_text: str):
 
 @bot.command()
 async def agregar_trivia(ctx, *, trivia_data: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -713,7 +736,7 @@ async def agregar_trivia(ctx, *, trivia_data: str):
 
 @bot.command()
 async def eliminar_trivia(ctx, trivia_id: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -732,7 +755,7 @@ async def eliminar_trivia(ctx, trivia_id: int):
 
 @bot.command()
 async def agregar_trivias_masivas(ctx, *, trivias_text: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -751,6 +774,43 @@ async def agregar_trivias_masivas(ctx, *, trivias_text: str):
             cur.execute("INSERT INTO trivias (question, answer, hint) VALUES (%s, %s, %s)", (question, answer, hint))
             count += 1
     await send_public_message(f"✅ Se agregaron {count} trivias.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+# Nuevos comandos para borrar TODOS los chistes y todas las trivias
+@bot.command()
+async def borrar_todos_chistes(ctx):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM jokes")
+    global unused_jokes
+    unused_jokes = []
+    await send_public_message("✅ Todos los chistes han sido borrados de la base de datos.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def borrar_todas_trivias(ctx):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != ADMIN_JT_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM trivias")
+    global unused_trivias
+    unused_trivias = []
+    await send_public_message("✅ Todas las trivias han sido borradas de la base de datos.")
     try:
         await ctx.message.delete()
     except:
@@ -866,6 +926,8 @@ async def on_message(message):
                 "   - **!agregar_trivia [pregunta] | [respuesta] | [pista]:** Agrega una trivia a la base de datos. La pista es opcional.\n"
                 "   - **!eliminar_trivia [id]:** Elimina una trivia de la base de datos por su ID.\n"
                 "   - **!agregar_trivias_masivas [lista de trivias]:** Agrega múltiples trivias (cada línea en formato: pregunta | respuesta | [pista]).\n"
+                "   - **!borrar_todos_chistes:** Elimina todos los chistes existentes en la base de datos.\n"
+                "   - **!borrar_todas_trivias:** Elimina todas las trivias (con respuestas y pistas) existentes en la base de datos.\n"
             )
         await message.channel.send(help_text)
         return
