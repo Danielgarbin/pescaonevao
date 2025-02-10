@@ -42,6 +42,26 @@ def init_db():
                 logros JSONB DEFAULT '[]'
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS jokes (
+                id SERIAL PRIMARY KEY,
+                content TEXT NOT NULL
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS trivias (
+                id SERIAL PRIMARY KEY,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                hint TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS memes (
+                id SERIAL PRIMARY KEY,
+                url TEXT NOT NULL
+            )
+        """)
 init_db()
 
 ######################################
@@ -150,37 +170,34 @@ def normalize_string(s):
     return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
 
 ######################################
-# CHISTES: 200 chistes originales para sacar carcajadas
+# FUNCIONES PARA CHISTES, TRIVIAS Y MEMES (USANDO LA BASE DE DATOS)
 ######################################
-ALL_JOKES = [
-    "¿Por qué los programadores confunden Halloween y Navidad? Porque OCT 31 == DEC 25.",
-]
-unused_jokes = ALL_JOKES.copy()
-
 def get_random_joke():
-    global unused_jokes, ALL_JOKES
-    if not unused_jokes:
-        unused_jokes = ALL_JOKES.copy()
-    joke = random.choice(unused_jokes)
-    unused_jokes.remove(joke)
-    return joke
-
-######################################
-# TRIVIA: 200 preguntas de cultura general
-######################################
-ALL_TRIVIA = [
-    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez", "hint": "Comienza con 'Gabriel'."},
-    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas", "hint": "Comienza con 'A'."},
-]
-unused_trivia = ALL_TRIVIA.copy()
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT content FROM jokes ORDER BY random() LIMIT 1")
+        result = cur.fetchone()
+        if result:
+            return result["content"]
+        else:
+            return "No hay chistes disponibles en este momento."
 
 def get_random_trivia():
-    global unused_trivia, ALL_TRIVIA
-    if not unused_trivia:
-        unused_trivia = ALL_TRIVIA.copy()
-    trivia = random.choice(unused_trivia)
-    unused_trivia.remove(trivia)
-    return trivia
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT question, answer, hint FROM trivias ORDER BY random() LIMIT 1")
+        result = cur.fetchone()
+        if result:
+            return result
+        else:
+            return {"question": "No hay trivias disponibles en este momento.", "answer": "", "hint": ""}
+
+def get_random_meme():
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT url FROM memes ORDER BY random() LIMIT 1")
+        result = cur.fetchone()
+        if result:
+            return result["url"]
+        else:
+            return "No hay memes disponibles en este momento."
 
 ######################################
 # INICIALIZACIÓN DEL BOT
@@ -585,7 +602,9 @@ async def saltar_etapa(ctx, etapa: int):
     except:
         pass
 
-# Comando !trivia (disponible para el owner; los demás inician trivia por lenguaje natural)
+######################################
+# COMANDO !trivia (disponible para el owner; los demás inician trivia por lenguaje natural)
+######################################
 @bot.command()
 async def trivia(ctx):
     if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
@@ -607,6 +626,135 @@ async def trivia(ctx):
 @bot.command()
 async def chiste(ctx):
     await ctx.send(get_random_joke())
+
+######################################
+# NUEVOS COMANDOS ADMIN PARA GESTIÓN DE CHISTES Y TRIVIAS
+######################################
+@bot.command()
+async def agregar_chiste(ctx, *, chiste_text: str):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO jokes (content) VALUES (%s) RETURNING id", (chiste_text,))
+        joke_id = cur.fetchone()[0]
+    await send_public_message(f"✅ Chiste agregado con ID {joke_id}.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def eliminar_chiste(ctx, joke_id: int):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM jokes WHERE id = %s", (joke_id,))
+        if cur.rowcount > 0:
+            await send_public_message(f"✅ Chiste con ID {joke_id} eliminado.")
+        else:
+            await send_public_message(f"❌ No se encontró un chiste con ID {joke_id}.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def agregar_chistes_masivos(ctx, *, chistes_text: str):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    chistes = [line.strip() for line in chistes_text.split("\n") if line.strip()]
+    if not chistes:
+        await send_public_message("❌ No se encontraron chistes para agregar.")
+        return
+    with conn.cursor() as cur:
+        for chiste in chistes:
+            cur.execute("INSERT INTO jokes (content) VALUES (%s)", (chiste,))
+    await send_public_message(f"✅ Se agregaron {len(chistes)} chistes.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def agregar_trivia(ctx, *, trivia_data: str):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    parts = [part.strip() for part in trivia_data.split("|")]
+    if len(parts) < 2:
+        await send_public_message("❌ Formato incorrecto. Usa: pregunta | respuesta | [pista]")
+        return
+    question = parts[0]
+    answer = parts[1]
+    hint = parts[2] if len(parts) >= 3 else ""
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO trivias (question, answer, hint) VALUES (%s, %s, %s) RETURNING id", (question, answer, hint))
+        trivia_id = cur.fetchone()[0]
+    await send_public_message(f"✅ Trivia agregada con ID {trivia_id}.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def eliminar_trivia(ctx, trivia_id: int):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM trivias WHERE id = %s", (trivia_id,))
+        if cur.rowcount > 0:
+            await send_public_message(f"✅ Trivia con ID {trivia_id} eliminada.")
+        else:
+            await send_public_message(f"❌ No se encontró una trivia con ID {trivia_id}.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def agregar_trivias_masivas(ctx, *, trivias_text: str):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    lines = [line.strip() for line in trivias_text.split("\n") if line.strip()]
+    count = 0
+    with conn.cursor() as cur:
+        for line in lines:
+            parts = [part.strip() for part in line.split("|")]
+            if len(parts) < 2:
+                continue
+            question = parts[0]
+            answer = parts[1]
+            hint = parts[2] if len(parts) >= 3 else ""
+            cur.execute("INSERT INTO trivias (question, answer, hint) VALUES (%s, %s, %s)", (question, answer, hint))
+            count += 1
+    await send_public_message(f"✅ Se agregaron {count} trivias.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
 ######################################
 # EVENTO ON_MESSAGE: Comandos de Lenguaje Natural y reenvío de DMs del campeón
@@ -712,6 +860,12 @@ async def on_message(message):
                 "   - **!eliminar_jugador [jugador]:** Elimina a un jugador del torneo.\n"
                 "   - **!configurar_etapa [etapa]:** Configura manualmente la etapa actual del torneo.\n"
                 "   - **!saltar_etapa [etapa]:** Salta directamente a la etapa indicada.\n"
+                "   - **!agregar_chiste [chiste]:** Agrega un chiste a la base de datos.\n"
+                "   - **!eliminar_chiste [id]:** Elimina un chiste de la base de datos por su ID.\n"
+                "   - **!agregar_chistes_masivos [lista de chistes]:** Agrega múltiples chistes (cada chiste en una nueva línea).\n"
+                "   - **!agregar_trivia [pregunta] | [respuesta] | [pista]:** Agrega una trivia a la base de datos. La pista es opcional.\n"
+                "   - **!eliminar_trivia [id]:** Elimina una trivia de la base de datos por su ID.\n"
+                "   - **!agregar_trivias_masivas [lista de trivias]:** Agrega múltiples trivias (cada línea en formato: pregunta | respuesta | [pista]).\n"
             )
         await message.channel.send(help_text)
         return
@@ -761,11 +915,7 @@ async def on_message(message):
         return
 
     if content in ["meme", "muéstrame un meme"]:
-        MEMES = [
-            "https://i.imgflip.com/1bij.jpg",
-            "https://i.imgflip.com/26am.jpg",
-        ]
-        meme_url = random.choice(MEMES)
+        meme_url = get_random_meme()
         await message.channel.send(meme_url)
         return
 
