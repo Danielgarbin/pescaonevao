@@ -1,4 +1,4 @@
-import discord
+import discord 
 import psycopg2
 import psycopg2.extras
 from discord.ext import commands
@@ -8,6 +8,7 @@ import os
 import re
 import threading
 import unicodedata
+import asyncio  # Para usar asyncio.sleep
 from flask import Flask, request, jsonify
 
 ######################################
@@ -367,12 +368,14 @@ async def avanzar_etapa(ctx):
         try:
             member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
             await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
+            await asyncio.sleep(1)  # Pausa para evitar demasiadas solicitudes en poco tiempo
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
     for uid, player in eliminados:
         try:
             member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
             await member.send(f"❌ Lo siento, has sido eliminado del torneo en la etapa {current_stage - 1}.")
+            await asyncio.sleep(1)  # Pausa para evitar demasiadas solicitudes en poco tiempo
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
     await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron y {len(eliminados)} fueron eliminados.")
@@ -687,4 +690,5 @@ def run_webserver():
 
 if __name__ == '__main__':
     threading.Thread(target=run_webserver).start()
+    # Se utiliza Uptimerobot para mantener el sitio activo, por lo que no se añade ninguna función de keep alive adicional.
     bot.run(os.getenv('DISCORD_TOKEN'))
