@@ -139,7 +139,8 @@ def normalize_string(s):
 ######################################
 # CHISTES: 170 chistes (los mejores que jamás he creado)
 ######################################
-# Aquí se incluyen 170 chistes; reemplaza estos ejemplos por los que consideres perfectos.
+# Aquí se definen 170 chistes divididos en 3 bloques.
+# Reemplaza o completa estos ejemplos con tus chistes finales.
 ALL_JOKES = [
     # Bloque 1: 70 chistes originales
     "¿Por qué el sol nunca se cansa? Porque siempre brilla con energía.",
@@ -159,7 +160,7 @@ ALL_JOKES = [
     "¿Cómo se llama el campeón de buceo? ¡El que se zambulle sin miedo!",
     "¿Qué hace un pollo en un ascensor? ¡Pío, pío, sube!",
     "¿Qué le dice el cero al ocho? ¡Bonito cinturón!",
-    "¿Por qué la gallina cruzó la calle? Para demostrar que no era un gallina.",
+    "¿Por qué la gallina cruzó la calle? Para demostrar que no era gallina.",
     "¿Qué hace una vaca en el espacio? ¡Muuu-gravedad cero!",
     "¿Por qué el reloj siempre está de buen humor? Porque tiene tiempo para todo.",
     "¿Qué hace una computadora en el baño? Navega por la red.",
@@ -197,7 +198,7 @@ ALL_JOKES = [
     "¿Por qué la lámpara es tan brillante? Porque ilumina hasta los chistes más oscuros.",
     "¿Qué dijo el semáforo al peatón? ¡No te detengas, sigue adelante!",
     "¿Por qué el ratón no usa sombrero? Porque ya tiene orejas.",
-    # Bloque 2: 50 chistes adicionales (completa con 50 chistes creativos)
+    # Bloque 2: 50 chistes adicionales
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones perdidos.",
     "¿Por qué la bicicleta siempre se ríe? Porque tiene dos ruedas de humor.",
@@ -237,12 +238,6 @@ ALL_JOKES = [
     "¿Por qué el teclado se volvió romántico? Porque encontró las teclas de su corazón.",
     "¿Qué hace un cuadro en un museo? Se queda enmarcado en sus pensamientos.",
     "¿Por qué el sombrero es tan humilde? Porque siempre se inclina ante la moda.",
-    "¿Qué le dijo una escalera a otra? ¡Nos vemos en el siguiente nivel!",
-    "¿Por qué la mantequilla se derrite de felicidad? Porque siempre está en su punto ideal.",
-    "¿Qué hace un martillo en el gimnasio? Golpea sus propios límites.",
-    "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
-    "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
-    "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
     # Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo con fuerza.",
     "¿Qué hace un pez en el ordenador? Nada en la red con estilo.",
@@ -333,7 +328,7 @@ predicciones = [
 # INICIALIZACIÓN DEL BOT
 ######################################
 intents = discord.Intents.default()
-intents.members = True   # Para poder buscar miembros que no estén en el canal actual
+intents.members = True
 intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
@@ -598,7 +593,6 @@ async def on_message(message):
 
     global stage_names, current_stage, active_trivia, trivia_questions
 
-    # Importar unicodedata para normalizar cadenas
     import unicodedata
     def normalize_string(s):
         return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
