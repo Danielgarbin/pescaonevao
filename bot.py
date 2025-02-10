@@ -134,12 +134,12 @@ def award_symbolic_reward(user: discord.Member, reward: int):
 # NORMALIZACIÓN DE CADENAS
 ######################################
 def normalize_string(s):
-    # Elimina acentos, espacios y pasa a minúsculas
     return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
 
 ######################################
 # CHISTES: 170 chistes (los mejores que jamás he creado)
 ######################################
+# Aquí se incluyen 170 chistes; reemplaza estos ejemplos por los que consideres perfectos.
 ALL_JOKES = [
     # Bloque 1: 70 chistes originales
     "¿Por qué el sol nunca se cansa? Porque siempre brilla con energía.",
@@ -164,7 +164,7 @@ ALL_JOKES = [
     "¿Por qué el reloj siempre está de buen humor? Porque tiene tiempo para todo.",
     "¿Qué hace una computadora en el baño? Navega por la red.",
     "¿Cómo se despiden los carteros? Con un sello de despedida.",
-    "¿Qué le dijo una ventana a otra? ¡Nos vemos en el marco!",
+    "¿Qué le dice una ventana a otra? ¡Nos vemos en el marco!",
     "¿Por qué la bicicleta se cayó? Porque estaba dos-tirada.",
     "¿Qué hace un caracol en una carrera? Llega lento, pero con casa.",
     "¿Por qué el helado es siempre feliz? Porque se derrite de risa.",
@@ -178,7 +178,7 @@ ALL_JOKES = [
     "¿Cómo se llama el rey de los chistes malos? ¡El chistocrata!",
     "¿Qué hace un globo en una fiesta? Se infla de alegría.",
     "¿Por qué la araña es tan creativa? Porque siempre teje nuevas ideas.",
-    "¿Qué le dijo el queso a la galleta? ¡Juntos somos el snack perfecto!",
+    "¿Qué le dice el queso a la galleta? ¡Juntos somos el snack perfecto!",
     "¿Por qué el cartero nunca se retrasa? Porque siempre entrega a tiempo.",
     "¿Qué hace un paraguas en un día soleado? Se guarda en silencio.",
     "¿Por qué el semáforo nunca se enoja? Porque siempre cambia de humor.",
@@ -196,12 +196,8 @@ ALL_JOKES = [
     "¿Qué hace un zapato cuando está enamorado? Se ajusta al corazón.",
     "¿Por qué la lámpara es tan brillante? Porque ilumina hasta los chistes más oscuros.",
     "¿Qué dijo el semáforo al peatón? ¡No te detengas, sigue adelante!",
-    "¿Por qué el ratón no usa sombrero? Porque ya tiene orejas."
-    # (Agrega los 20 chistes restantes para completar 70 en este bloque)
-]
-
-# Bloque 2: 50 chistes adicionales (agrega 50 chistes creativos aquí)
-ADDITIONAL_JOKES = [
+    "¿Por qué el ratón no usa sombrero? Porque ya tiene orejas.",
+    # Bloque 2: 50 chistes adicionales (completa con 50 chistes creativos)
     "¿Por qué el ordenador fue al psicólogo? Porque tenía demasiadas ventanas abiertas.",
     "¿Qué hace un gato en la computadora? Busca ratones perdidos.",
     "¿Por qué la bicicleta siempre se ríe? Porque tiene dos ruedas de humor.",
@@ -246,11 +242,8 @@ ADDITIONAL_JOKES = [
     "¿Qué hace un martillo en el gimnasio? Golpea sus propios límites.",
     "¿Por qué la tostadora es la reina de la cocina? Porque siempre está en la cresta del pan.",
     "¿Qué le dijo el helado a la galleta? ¡Eres mi complemento perfecto!",
-    "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles."
-]
-
-# Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
-NEW_JOKES = [
+    "¿Por qué el campo de fútbol se siente orgulloso? Porque siempre está lleno de goles.",
+    # Bloque 3: 50 chistes nuevos (los mejores que jamás he creado)
     "¿Por qué el reloj se fue al gimnasio? Porque quería marcar ritmo con fuerza.",
     "¿Qué hace un pez en el ordenador? Nada en la red con estilo.",
     "¿Por qué los fantasmas no pueden mentir? Porque su verdad se les ve a través.",
@@ -290,9 +283,6 @@ NEW_JOKES = [
     "¿Por qué el motor se emocionó? Porque se encendió la pasión y la fuerza.",
     "¿Qué hace un boomerang cuando se cansa? Se queda en pausa y vuelve a su punto con determinación."
 ]
-
-# Unimos todos los chistes en una sola lista de 170 chistes
-ALL_JOKES = ALL_JOKES + ADDITIONAL_JOKES + NEW_JOKES
 unused_jokes = ALL_JOKES.copy()
 def get_random_joke():
     global unused_jokes, ALL_JOKES
@@ -608,7 +598,7 @@ async def on_message(message):
 
     global stage_names, current_stage, active_trivia, trivia_questions
 
-    # Importamos unicodedata para normalizar cadenas
+    # Importar unicodedata para normalizar cadenas
     import unicodedata
     def normalize_string(s):
         return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
