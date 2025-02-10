@@ -13,11 +13,11 @@ from flask import Flask, request, jsonify
 # CONFIGURACIÓN: IDs y Servidor
 ######################################
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
-PRIVATE_CHANNEL_ID = 1338130641354620988  # ID del canal privado (para comandos sensibles)
-PUBLIC_CHANNEL_ID  = 1338126297666424874  # ID del canal público (donde se muestran resultados)
-GUILD_ID = 123456789012345678            # REEMPLAZA con el ID de tu servidor (guild)
+PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público (donde se muestran resultados)
+GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
 
-# API_SECRET se usará para autenticar la API privada (si la usas)
+# API_SECRET para autenticar la API privada (si se usa)
 API_SECRET = os.environ.get("API_SECRET")
 
 ######################################
@@ -47,9 +47,22 @@ init_db()
 PREFIX = '!'
 STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Cantidad de jugadores que avanzan en cada etapa
 current_stage = 1
+# Nombres de las etapas
+stage_names = {
+    1: "Battle Royale",
+    2: "Snipers vs Runners",
+    3: "Boxfight duos",
+    4: "Pescadito dice",
+    5: "Gran Final"
+}
 
 ######################################
-# FUNCIONES PARA INTERACTUAR CON LA BASE DE DATOS
+# VARIABLE GLOBAL PARA TRIVIA
+######################################
+active_trivia = {}  # key: channel.id, value: {"question": ..., "answer": ...}
+
+######################################
+# FUNCIONES PARA LA BASE DE DATOS
 ######################################
 def get_participant(user_id):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -119,8 +132,9 @@ def award_symbolic_reward(user: discord.Member, reward: int):
     return new_symbolic
 
 ######################################
-# CHISTES: 170 chistes (70 originales + 50 adicionales + 50 nuevos extra)
+# CHISTES: 170 chistes (70 originales + 50 adicionales + 50 nuevos)
 ######################################
+# Asegúrate de reemplazar los siguientes ejemplos por la lista completa de 170 chistes.
 ALL_JOKES = [
     # Bloque 1: 70 chistes originales
     "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
@@ -464,7 +478,7 @@ async def avanzar_etapa(ctx):
         upsert_participant(uid, player)
         try:
             member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
-            await member.send(f"🎉 ¡Felicitaciones! Has avanzado a la etapa {current_stage}")
+            await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
     await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron")
@@ -544,6 +558,9 @@ async def on_message(message):
 
     if message.author.bot:
         return
+
+    global stage_names, current_stage, active_trivia  # Aseguramos usar las variables globales
+
     content = message.content.strip().lower()
     if content == "ranking":
         data = get_all_participants()
@@ -669,9 +686,7 @@ async def on_message(message):
             await message.channel.send(duel_text)
             return
 
-    # Procesar comandos si el mensaje empieza con el prefijo
-    if message.content.startswith(PREFIX):
-        await bot.process_commands(message)
+    await bot.process_commands(message)
 
 ######################################
 # EVENTO ON_READY
@@ -683,9 +698,6 @@ async def on_ready():
 ######################################
 # SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (API PRIVADA)
 ######################################
-app = Flask(__name__)
-
-# Agregamos una ruta raíz para que Render detecte un puerto abierto.
 @app.route("/")
 def home():
     return "El bot está funcionando!", 200
