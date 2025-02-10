@@ -637,10 +637,6 @@ async def on_ready():
 ######################################
 # SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (API PRIVADA)
 ######################################
-@app.route("/", methods=["GET"])
-def home_page():
-    return "El bot está funcionando!", 200
-
 def run_webserver():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
