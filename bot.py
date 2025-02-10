@@ -821,10 +821,10 @@ async def borrar_todas_trivias(ctx):
 ######################################
 @bot.event
 async def on_message(message):
+    global forwarding_enabled  # Se declara al inicio para evitar errores de variable local
     # Si el mensaje proviene de un DM y es del campeón y estamos en etapa 6, 7 o 8, se reenvía al canal 1338610365327474690
     if message.guild is None and champion_id is not None and message.author.id == champion_id and forwarding_enabled:
         if forwarding_end_time is not None and datetime.datetime.utcnow() > forwarding_end_time:
-            global forwarding_enabled
             forwarding_enabled = False
         else:
             try:
