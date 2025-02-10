@@ -14,8 +14,9 @@ from flask import Flask, request, jsonify
 # CONFIGURACIÓN: IDs y Servidor
 ######################################
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
-PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles
-PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público (donde se muestran resultados)
+PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles (no se utiliza en la versión final)
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles
+SPECIAL_HELP_CHANNEL = 1337708244327596123  # Canal especial para que el owner reciba la lista extendida de comandos
 GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
 
 API_SECRET = os.environ.get("API_SECRET")  # Para la API privada (opcional)
@@ -45,7 +46,8 @@ init_db()
 # CONFIGURACIÓN INICIAL DEL TORNEO
 ######################################
 PREFIX = '!'
-STAGES = {1: 60, 2: 48, 3: 24, 4: 12, 5: 1}  # Jugadores que avanzan en cada etapa
+# Configuración de etapas: cada etapa tiene un número determinado de jugadores.
+STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14}
 current_stage = 1
 stage_names = {
     1: "Battle Royale",
@@ -240,58 +242,86 @@ ALL_JOKES = [
     "¿Qué dijo el ventilador al calentarse? ¡Estoy enfriado de risa!",
     "¿Por qué la cebolla fue al circo? Para hacer llorar de risa a la gente.",
     "¿Qué hace una sandía en el desierto? Se derrite de tanto reír.",
-    "¿Por qué el semáforo se enamoró? Porque le hicieron 'verde' de envidia.",
-    "¿Qué dijo el ratón a la trampa? ¡No me atraparás con tus bromas!",
-    "¿Por qué el árbol fue a la fiesta? Porque quería dejar caer sus hojas de risa.",
-    "¿Qué hace un globo en el parque? Se infla de emoción.",
-    "¿Por qué la luna se rió? Porque vio el sol haciendo muecas.",
-    "¿Qué dijo el delfín al pez? ¡Eres el pez de la fiesta!",
-    "¿Por qué el plátano se puso de mal humor? Porque se sentía 'despistado'.",
-    "¿Qué hace una cafetera en la mañana? Despierta el humor a tope.",
-    "¿Por qué el zapato baila? Porque tiene suela de ritmo.",
-    "¿Qué dijo el pastel a la vela? ¡Apágate, que me quemo de risa!",
-    "¿Por qué la cuchara se rió? Porque se encontró con el tenedor en una cita divertida.",
-    "¿Qué hace una caja en el gimnasio? Levanta sus 'paquetes' de humor.",
-    "¿Por qué el cuaderno estaba emocionado? Porque iba a escribir una historia hilarante.",
-    "¿Qué dijo el teléfono móvil al cargador? ¡Eres mi energía!",
-    "¿Por qué el espejo se sintió halagado? Porque reflejaba tanta belleza.",
-    "¿Qué hace un plátano en el supermercado? Se desliza entre risas.",
-    "¿Por qué la manzana fue a la escuela? Para evitar caer del árbol del saber.",
-    "¿Qué dijo el sombrero a la cabeza? ¡Tienes estilo!",
-    "¿Por qué la taza se rompió de la risa? Porque no pudo contener su alegría.",
-    "¿Qué hace un lápiz en el bar? Dibuja líneas de chiste.",
-    "¿Por qué el sol se puso de acuerdo con la luna? Porque juntos iluminan el humor.",
-    "¿Qué dijo la ardilla al roer una nuez? ¡Esto es una chiste-nuez!",
-    "¿Por qué la araña se inscribió en clases de teatro? Para tejer sus propios guiones.",
-    "¿Qué hace un cartero en una carrera? Corre tras las bromas.",
-    "¿Por qué el gato se rió? Porque vio un ratón en miniatura.",
-    "¿Qué dijo la oveja al cordero? ¡Baa, qué gracia tienes!",
-    "¿Por qué el helado se derritió de la risa? Porque el calor del chiste lo alcanzó.",
-    "¿Qué hace una sandía en la biblioteca? Se pone a leer 'frutal' literatura.",
-    "¿Por qué el reloj se puso a bailar? Porque marcó el ritmo del momento.",
-    "¿Qué dijo la flor al girasol? ¡Tu sonrisa ilumina el día!",
-    "¿Por qué el ratón se puso nervioso? Porque el gato contaba chistes malos.",
-    "¿Qué hace un semáforo en una discusión? Cambia de tono.",
-    "¿Por qué la computadora se puso celosa? Porque el teléfono tenía más llamadas.",
-    "¿Qué dijo el caracol al zumbido? ¡Vete despacio, no me atropelles!",
-    "¿Por qué la bicicleta se cayó de la risa? Porque perdió el equilibrio del humor.",
-    "¿Qué hace un pez en el gimnasio? Nada, pero nada mejor que reír.",
-    "¿Por qué el periódico se rió? Porque leyó noticias de humor.",
-    "¿Qué dijo el cuaderno al bolígrafo? ¡Escribe conmigo!",
-    "¿Por qué la lámpara se encendió de alegría? Porque vio una idea brillante.",
-    "¿Qué hace una taza de café en el trabajo? Inspira energía y humor.",
-    "¿Por qué el plátano se sintió aplastado? Porque se encontró en medio de una pelea de frutas.",
-    "¿Qué dijo el ratón a la computadora? ¡Eres mi conexión favorita!",
-    "¿Por qué el perro se puso a reír? Porque escuchó un ladrido chistoso.",
-    "¿Qué hace una nube en un día gris? Ilumina con carcajadas.",
-    "¿Por qué el piano se puso a reír? Porque encontró la nota perfecta.",
-    "¿Qué dijo la fresa a la crema? ¡Eres mi complemento ideal!",
-    "¿Por qué el globo se volvió filosófico? Porque infló su mente.",
-    "¿Qué hace una hoja en el otoño? Baila con el viento de la risa.",
-    "¿Por qué el reloj se enamoró del calendario? Porque juntos marcan el tiempo del humor.",
-    "¿Qué dijo el teléfono a la red? ¡Conectémonos en risas!",
-    "¿Por qué la cuchara se sintió especial? Porque siempre revolvía el ambiente con alegría.",
-    "¿Qué hace un libro en una fiesta? Comparte capítulos de diversión."
+    "¿Por qué el semáforo se volvió poeta? Porque siempre decía '¡Alto, belleza!'",
+    "¿Qué hace un cartero en la playa? Entrega arena y sol.",
+    "¿Por qué la computadora se puso nerviosa? Porque tenía demasiadas pestañas abiertas.",
+    "¿Qué dijo el disco duro al USB? ¡Guarda tus secretos, yo tengo memoria!",
+    "¿Por qué la impresora se fue de vacaciones? Porque necesitaba recargar tinta de vida.",
+    "¿Qué hace una calculadora en una fiesta? Suma diversión.",
+    "¿Por qué el robot se fue al bar? Porque necesitaba un poco de aceite para lubricar sus circuitos.",
+    "¿Qué le dijo el café a la leche? ¡Juntos somos una mezcla perfecta!",
+    "¿Por qué el ventilador siempre está relajado? Porque sabe cómo girar la situación.",
+    "¿Qué dijo la batería al cargador? ¡Eres mi fuente de energía!",
+    "¿Por qué el microondas es tan rápido? Porque siempre calienta el ambiente.",
+    "¿Qué hace un cargador en el gimnasio? ¡Carga músculo!",
+    "¿Por qué el smartphone se puso celoso? Porque el tablet tenía mejor pantalla.",
+    "¿Qué le dijo el WiFi al router? ¡Conectemos nuestros corazones!",
+    "¿Por qué el módem se rompió? Porque no pudo soportar tanta conexión.",
+    "¿Qué hace una alarma en la mañana? Despierta las carcajadas.",
+    "¿Por qué la lámpara fue a terapia? Porque tenía problemas de iluminación.",
+    "¿Qué dijo la bombilla al interruptor? ¡Enciéndeme tu atención!",
+    "¿Por qué la puerta se puso a bailar? Porque tenía bisagras con ritmo.",
+    "¿Qué hace un libro en el supermercado? Busca ofertas de lectura.",
+    "¿Por qué la pluma se puso a llorar? Porque se le acabó la tinta.",
+    "¿Qué le dijo el cuaderno al bolígrafo? ¡Escribe, que te sigo la idea!",
+    "¿Por qué el escritorio se sentía solo? Porque no tenía compañía de ideas.",
+    "¿Qué hace una silla en la biblioteca? Se sienta a leer.",
+    "¿Por qué la ventana se emocionó? Porque abrió nuevas perspectivas.",
+    "¿Qué dijo el mantel a la mesa? ¡Eres el soporte de mis sueños!",
+    "¿Por qué el microondas rompió el silencio? Porque siempre tenía algo caliente que decir.",
+    "¿Qué hace un tostador en invierno? Calienta la mañana con alegría.",
+    "¿Por qué la cafetera era tan popular? Porque siempre servía una buena taza de humor.",
+    "¿Qué dijo el exprimidor a la fruta? ¡Exprime lo mejor de ti!",
+    "¿Por qué la batidora estaba de buen humor? Porque mezclaba risas y alegría.",
+    "¿Qué hace una olla en el fuego? Cocina chistes a fuego lento.",
+    "¿Por qué el sartén se enamoró de la cuchara? Porque juntos hacían el mejor revuelto.",
+    "¿Qué dijo la freidora al aceite? ¡Eres mi chispa de energía!",
+    "¿Por qué el rallador era tan divertido? Porque siempre sacaba lo mejor de cada cosa.",
+    "¿Qué hace una tapa en la olla? Mantiene los secretos del sabor.",
+    "¿Por qué la jarra se llenó de alegría? Porque siempre servía buenos momentos.",
+    "¿Qué dijo el vaso a la copa? ¡Brindemos por la amistad!",
+    "¿Por qué la botella se sintió especial? Porque contenía la esencia de la diversión.",
+    "¿Qué hace un sacacorchos en la cena? Abre la fiesta con estilo.",
+    "¿Por qué la pizza se ríe? Porque siempre tiene rebanadas de humor.",
+    "¿Qué dijo el helado al cono? ¡Juntos somos la combinación perfecta!",
+    "¿Por qué el hot dog se puso contento? Porque siempre estaba en su punto.",
+    "¿Qué hace una hamburguesa en la parrilla? Cocina chistes a la brasa.",
+    "¿Por qué la ensalada es la comediante? Porque siempre mezcla risas y sabores.",
+    "¿Qué dijo el sándwich al pan? ¡Juntos somos una gran broma!",
+    "¿Por qué el postre se sentía triunfante? Porque siempre terminaba con broche de oro.",
+    "¿Qué hace una galleta en el horno? Se dora de risa.",
+    "¿Por qué el brownie se puso famoso? Porque tenía un toque de genialidad.",
+    "¿Qué dijo el flan al caramelo? ¡Eres la dulzura de mi vida!",
+    "¿Por qué el batido siempre está animado? Porque mezcla sabores y alegría.",
+    "¿Qué hace un pastel en el cumpleaños? Crea momentos inolvidables.",
+    "¿Por qué el merengue se ríe? Porque siempre está en las nubes de la diversión.",
+    "¿Qué dijo el churro al chocolate? ¡Eres mi complemento perfecto!",
+    "¿Por qué el café con leche se puso de moda? Porque siempre traía buena energía.",
+    "¿Qué hace una tortilla en la sartén? Revuelve chistes a lo loco.",
+    "¿Por qué el arroz se sintió especial? Porque siempre acompañaba los mejores momentos.",
+    "¿Qué dijo el frijol a la lenteja? ¡Juntos somos la chispa de la comida!",
+    "¿Por qué la paella fue a la fiesta? Porque sabía mezclar a todos con sabor.",
+    "¿Qué hace una crema batida en el postre? Añade el toque final de dulzura.",
+    "¿Por qué el zumo se sentía fresco? Porque siempre exprimía la risa.",
+    "¿Qué dijo el té helado al verano? ¡Refresca mi humor!",
+    "¿Por qué el chocolate caliente se abrazó? Porque derritía corazones.",
+    "¿Qué hace una bebida en la fiesta? Brinda momentos de alegría.",
+    "¿Por qué el licor se volvió poeta? Porque embriagaba de sentimientos.",
+    "¿Qué dijo el cóctel a la fiesta? ¡Soy la mezcla perfecta de diversión!",
+    "¿Por qué la soda se rió a carcajadas? Porque burbujeaba de felicidad.",
+    "¿Qué hace una cerveza en el bar? Sirve risas en cada sorbo.",
+    "¿Por qué el vino era tan elegante? Porque siempre brindaba por la vida.",
+    "¿Qué dijo el champán en la celebración? ¡Burbujas de alegría para todos!",
+    "¿Por qué el refresco se sintió animado? Porque siempre tenía chispa.",
+    "¿Qué hace una limonada en el verano? Exprime el sol y la risa.",
+    "¿Por qué el zumo de naranja fue invitado a la fiesta? Porque sabía dar vitamina de humor.",
+    "¿Qué dijo el agua mineral al agitarse? ¡Siempre refresco el ambiente!",
+    "¿Por qué el té de hierbas se volvió famoso? Porque tenía la receta de la calma y la risa.",
+    "¿Qué hace una infusión en la tarde? Endulza los momentos con humor.",
+    "¿Por qué la mermelada se sentía especial? Porque endulzaba cada día.",
+    "¿Qué dijo el pan tostado al aguacate? ¡Juntos somos la tendencia del desayuno!",
+    "¿Por qué el cereal se reía en la mañana? Porque siempre traía buen grano de humor.",
+    "¿Qué hace una avena en el desayuno? Nutre el cuerpo y alegra el alma."
 ]
 unused_jokes = ALL_JOKES.copy()
 
@@ -408,7 +438,7 @@ ALL_TRIVIA = [
     {"question": "¿Quién pintó 'Guernica'?", "answer": "pablo picasso"},
     {"question": "¿Qué instrumento mide la intensidad sísmica?", "answer": "sismógrafo"},
     {"question": "¿Cuál es el nombre de la estrella más cercana a la Tierra?", "answer": "sol"},
-    {"question": "¿En qué año se descubrió el fuego?", "answer": "prehistórico (no tiene año específico)"},
+    {"question": "¿En qué año se descubrió el fuego?", "answer": "prehistórico"},
     {"question": "¿Qué país tiene más islas en el mundo?", "answer": "suecia"},
     {"question": "¿Quién escribió 'El Señor de los Anillos'?", "answer": "j. r. r. tolkien"},
     {"question": "¿Cuál es el río más largo de Asia?", "answer": "yangtsé"},
@@ -457,7 +487,7 @@ ALL_TRIVIA = [
     {"question": "¿Cuál es el animal nacional de Canadá?", "answer": "castor"},
     {"question": "¿Quién pintó 'La persistencia de la memoria'?", "answer": "salvador dalí"},
     {"question": "¿Cuál es la capital de Holanda?", "answer": "ámsterdam"},
-    {"question": "¿En qué año se descubrió la electricidad?", "answer": "siglo XVIII (no hay un año exacto)"},
+    {"question": "¿En qué año se descubrió la electricidad?", "answer": "siglo xviii"},
     {"question": "¿Qué país es famoso por el whisky?", "answer": "escocia"},
     {"question": "¿Cuál es el elemento químico con el símbolo 'Na'?", "answer": "sodio"},
     {"question": "¿Quién escribió 'Crimen y Castigo'?", "answer": "fiódor dostoyevski"},
@@ -616,11 +646,11 @@ def api_set_stage():
     return jsonify({"message": "Etapa configurada", "stage": stage}), 200
 
 ######################################
-# COMANDOS SENSIBLES DE DISCORD (con “!” – Solo el Propietario en canal privado)
+# COMANDOS SENSIBLES DE DISCORD (con “!” – Solo el Propietario en el canal autorizado)
 ######################################
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -629,11 +659,13 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
     match = re.search(r'\d+', jugador)
     if not match:
         await send_public_message("No se pudo encontrar al miembro.")
+        await ctx.message.delete()
         return
     member_id = int(match.group())
     guild = ctx.guild or bot.get_guild(GUILD_ID)
     if guild is None:
         await send_public_message("No se pudo determinar el servidor.")
+        await ctx.message.delete()
         return
     try:
         member = guild.get_member(member_id)
@@ -641,11 +673,13 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
             member = await guild.fetch_member(member_id)
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro en el servidor.")
+        await ctx.message.delete()
         return
     try:
         puntos = int(puntos)
     except ValueError:
         await send_public_message("Por favor, proporciona un número válido de puntos.")
+        await ctx.message.delete()
         return
     new_points = update_score(member, puntos)
     await send_public_message(f"✅ Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos")
@@ -656,7 +690,7 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
 
 @bot.command()
 async def reducir_puntuacion(ctx, jugador: str, puntos: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -687,7 +721,7 @@ async def clasificacion(ctx):
 
 @bot.command()
 async def avanzar_etapa(ctx):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -697,17 +731,55 @@ async def avanzar_etapa(ctx):
     current_stage += 1
     data = get_all_participants()
     sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
-    cutoff = STAGES[current_stage]
+    cutoff = STAGES.get(current_stage)
+    if cutoff is None:
+        await send_public_message("No hay configuración para esta etapa.")
+        await ctx.message.delete()
+        return
     avanzan = sorted_players[:cutoff]
+    eliminados = sorted_players[cutoff:]
     for uid, player in avanzan:
         player["etapa"] = current_stage
         upsert_participant(uid, player)
         try:
             member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
-            await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage}")
+            await member.send(f"🎉 ¡Felicidades! Has avanzado a la etapa {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
-    await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron")
+    for uid, player in eliminados:
+        try:
+            member = ctx.guild.get_member(int(uid)) or await ctx.guild.fetch_member(int(uid))
+            await member.send(f"❌ Lo siento, has sido eliminado del torneo en la etapa {current_stage - 1}.")
+        except Exception as e:
+            print(f"Error al enviar mensaje a {uid}: {e}")
+    await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron y {len(eliminados)} fueron eliminados.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def retroceder_etapa(ctx):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    global current_stage
+    if current_stage <= 1:
+        await send_public_message("No se puede retroceder de la etapa 1.")
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    current_stage -= 1
+    data = get_all_participants()
+    for uid, player in data["participants"].items():
+        player["etapa"] = current_stage
+        upsert_participant(uid, player)
+    await send_public_message(f"✅ Etapa retrocedida. Ahora la etapa es {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
     try:
         await ctx.message.delete()
     except:
@@ -715,7 +787,7 @@ async def avanzar_etapa(ctx):
 
 @bot.command()
 async def eliminar_jugador(ctx, jugador: str):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -724,16 +796,19 @@ async def eliminar_jugador(ctx, jugador: str):
     match = re.search(r'\d+', jugador)
     if not match:
         await send_public_message("No se pudo encontrar al miembro.")
+        await ctx.message.delete()
         return
     member_id = int(match.group())
     guild = ctx.guild or bot.get_guild(GUILD_ID)
     if guild is None:
         await send_public_message("No se pudo determinar el servidor.")
+        await ctx.message.delete()
         return
     try:
         member = guild.get_member(member_id) or await guild.fetch_member(member_id)
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro en el servidor.")
+        await ctx.message.delete()
         return
     user_id = str(member.id)
     with conn.cursor() as cur:
@@ -746,7 +821,7 @@ async def eliminar_jugador(ctx, jugador: str):
 
 @bot.command()
 async def configurar_etapa(ctx, etapa: int):
-    if ctx.author.id != OWNER_ID or ctx.channel.id != PRIVATE_CHANNEL_ID:
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
         try:
             await ctx.message.delete()
         except:
@@ -755,6 +830,26 @@ async def configurar_etapa(ctx, etapa: int):
     global current_stage
     current_stage = etapa
     await send_public_message(f"✅ Etapa actual configurada a {etapa}")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+# Comando !trivia (disponible para el owner; los demás inician trivia por lenguaje natural)
+@bot.command()
+async def trivia(ctx):
+    if ctx.author.id != OWNER_ID or ctx.channel.id != PUBLIC_CHANNEL_ID:
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    if ctx.channel.id in active_trivia:
+        await ctx.send("Ya hay una trivia activa en este canal.")
+        return
+    trivia_item = get_random_trivia()
+    active_trivia[ctx.channel.id] = trivia_item
+    await ctx.send(f"**Trivia:** {trivia_item['question']}\n_Responde en el chat._")
     try:
         await ctx.message.delete()
     except:
@@ -787,7 +882,7 @@ async def on_message(message):
 
     global stage_names, current_stage, active_trivia
 
-    def normalize_string(s):
+    def normalize_string_local(s):
         return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
 
     content = message.content.strip().lower()
@@ -837,13 +932,26 @@ async def on_message(message):
             "   - **topmejores:** Muestra el ranking de los 10 jugadores con mayor puntaje del torneo.\n"
             "   - **misestrellas:** Muestra cuántas estrellas simbólicas tienes.\n"
             "   - **topestrellas:** Muestra el ranking de los 10 jugadores con más estrellas simbólicas.\n"
-            "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio (sin repetir hasta agotar la lista de 200 chistes).\n"
+            "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio.\n"
             "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia; si respondes correctamente, ganas 1 estrella simbólica.\n"
             "   - **oráculo** o **predicción:** Recibe una predicción divertida.\n"
             "   - **meme** o **muéstrame un meme:** Muestra un meme aleatorio.\n"
             "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras; si ganas, ganas 1 estrella simbólica.\n"
             "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes; el ganador gana 1 estrella simbólica.\n"
         )
+        # Si el autor es el owner y lo escribe en el canal especial, se agregan además los comandos sensibles.
+        if message.author.id == OWNER_ID and message.channel.id == SPECIAL_HELP_CHANNEL:
+            help_text += "\n**Comandos Sensibles (!):**\n"
+            help_text += (
+                "   - **!actualizar_puntuacion [jugador] [puntos]:** Actualiza la puntuación de un jugador.\n"
+                "   - **!reducir_puntuacion [jugador] [puntos]:** Resta puntos a un jugador.\n"
+                "   - **!ver_puntuacion:** Muestra tu puntaje actual del torneo.\n"
+                "   - **!clasificacion:** Muestra la clasificación completa del torneo.\n"
+                "   - **!avanzar_etapa:** Avanza a la siguiente etapa del torneo y notifica a los jugadores.\n"
+                "   - **!retroceder_etapa:** Retrocede a la etapa anterior del torneo.\n"
+                "   - **!eliminar_jugador [jugador]:** Elimina a un jugador del torneo.\n"
+                "   - **!configurar_etapa [etapa]:** Configura manualmente la etapa actual del torneo.\n"
+            )
         await message.channel.send(help_text)
         return
 
@@ -864,14 +972,14 @@ async def on_message(message):
 
     if any(phrase in content for phrase in ["quiero jugar trivia", "jugar trivia", "trivia"]):
         if message.channel.id not in active_trivia:
-            trivia = get_random_trivia()
-            active_trivia[message.channel.id] = trivia
-            await message.channel.send(f"**Trivia:** {trivia['question']}\n_Responde en el chat._")
+            trivia_item = get_random_trivia()
+            active_trivia[message.channel.id] = trivia_item
+            await message.channel.send(f"**Trivia:** {trivia_item['question']}\n_Responde en el chat._")
             return
 
     if message.channel.id in active_trivia:
-        trivia = active_trivia[message.channel.id]
-        if normalize_string(message.content.strip()) == normalize_string(trivia['answer']):
+        trivia_item = active_trivia[message.channel.id]
+        if normalize_string_local(message.content.strip()) == normalize_string_local(trivia_item['answer']):
             symbolic = award_symbolic_reward(message.author, 1)
             response = f"🎉 ¡Correcto, {message.author.display_name}! Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
             await message.channel.send(response)
