@@ -1,6 +1,7 @@
 import discord
 import psycopg2
 import psycopg2.extras
+import asyncio
 from discord.ext import commands
 import json
 import random
@@ -507,6 +508,124 @@ async def trivia(ctx):
 @bot.command()
 async def chiste(ctx):
     await ctx.send(get_random_joke())
+
+######################################
+# COMANDOS DE ADMINISTRACIÓN PARA CHISTES Y TRIVIAS
+######################################
+
+# Verificamos si el mensaje es un DM del OWNER
+def is_owner_dm(ctx):
+    return ctx.author.id == OWNER_ID and isinstance(ctx.channel, discord.DMChannel)
+
+@bot.command()
+async def agregar_chiste(ctx, *, chiste: str):
+    if not is_owner_dm(ctx):
+        # Si no es el OWNER o no es un DM, ignoramos y borramos el mensaje si es posible
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO jokes (joke_text) VALUES (%s)", (chiste,))
+    await ctx.send("✅ Chiste agregado exitosamente.")
+
+@bot.command()
+async def eliminar_chiste(ctx, joke_id: int):
+    if not is_owner_dm(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM jokes WHERE id = %s", (joke_id,))
+    await ctx.send(f"✅ Chiste con ID {joke_id} eliminado.")
+
+@bot.command()
+async def listar_chistes(ctx):
+    if not is_owner_dm(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT id, joke_text FROM jokes ORDER BY id")
+        jokes = cur.fetchall()
+    if not jokes:
+        await ctx.send("No hay chistes en la base de datos.")
+        return
+    messages = []
+    for joke in jokes:
+        messages.append(f"ID: {joke['id']} - {joke['joke_text']}")
+    # Enviar los chistes en segmentos para evitar exceder el límite de Discord
+    for i in range(0, len(messages), 10):
+        chunk = "\n".join(messages[i:i+10])
+        await ctx.send(chunk)
+
+@bot.command()
+async def agregar_trivia(ctx):
+    if not is_owner_dm(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    def check(m):
+        return m.author.id == OWNER_ID and isinstance(m.channel, discord.DMChannel)
+    await ctx.send("Por favor, envía la pregunta de la trivia:")
+    try:
+        question_msg = await bot.wait_for('message', check=check, timeout=60)
+        question = question_msg.content.strip()
+        await ctx.send("Ahora, envía la respuesta correcta:")
+        answer_msg = await bot.wait_for('message', check=check, timeout=60)
+        answer = answer_msg.content.strip()
+        await ctx.send("Finalmente, envía la pista de ayuda:")
+        hint_msg = await bot.wait_for('message', check=check, timeout=60)
+        hint = hint_msg.content.strip()
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO trivia (question, answer, hint)
+                VALUES (%s, %s, %s)
+            """, (question, answer, hint))
+        await ctx.send("✅ Trivia agregada exitosamente.")
+    except asyncio.TimeoutError:
+        await ctx.send("⏰ Tiempo de espera excedido. Por favor, intenta nuevamente.")
+
+@bot.command()
+async def eliminar_trivia(ctx, trivia_id: int):
+    if not is_owner_dm(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM trivia WHERE id = %s", (trivia_id,))
+    await ctx.send(f"✅ Trivia con ID {trivia_id} eliminada.")
+
+@bot.command()
+async def listar_trivias(ctx):
+    if not is_owner_dm(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT id, question, answer, hint FROM trivia ORDER BY id")
+        trivias = cur.fetchall()
+    if not trivias:
+        await ctx.send("No hay trivias en la base de datos.")
+        return
+    messages = []
+    for trivia in trivias:
+        messages.append(f"ID: {trivia['id']}\nPregunta: {trivia['question']}\nRespuesta: {trivia['answer']}\nPista: {trivia['hint']}\n")
+    # Enviar las trivias en segmentos para evitar exceder el límite de Discord
+    for i in range(0, len(messages), 2):
+        chunk = "\n".join(messages[i:i+2])
+        await ctx.send(chunk)
 
 ######################################
 # EVENTO ON_MESSAGE: Comandos de Lenguaje Natural
