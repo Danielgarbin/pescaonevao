@@ -17,7 +17,7 @@ from flask import Flask, request, jsonify
 ######################################
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles (no se utiliza en la versión final)
-PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles (para activar los comandos sensibles)
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles (para activar comandos sensibles)
 SPECIAL_HELP_CHANNEL = 1338608387197243422  # Canal especial para que el owner reciba la lista extendida de comandos
 GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
 
@@ -81,7 +81,6 @@ init_db()
 ######################################
 PREFIX = '!'
 # Configuración de etapas: cada etapa tiene un número determinado de jugadores.
-# Se agregan las etapas 7 y 8.
 STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14, 6: 1, 7: 1, 8: 1}
 current_stage = 1
 stage_names = {
@@ -334,16 +333,16 @@ def api_set_stage():
 
 ######################################
 # RESTRICCIÓN PARA COMANDOS SENSIBLES
-# Estos comandos solo se pueden usar si:
-#   - El autor es OWNER_ID, y
-#   - El mensaje proviene de DM (ctx.guild is None) o del canal con ID PUBLIC_CHANNEL_ID (1338126297666424874)
+# Estos comandos (de puntuación, administración, calendario y notificaciones)
+# sólo pueden ser usados por OWNER_ID desde DM o en el canal con ID PUBLIC_CHANNEL_ID (1338126297666424874)
 ######################################
 def is_owner_and_allowed(ctx):
     return ctx.author.id == OWNER_ID and (ctx.guild is None or ctx.channel.id == PUBLIC_CHANNEL_ID)
 
 ######################################
-# COMANDOS SENSIBLES DE DISCORD (para puntuación, etc.)
-######################################
+# COMANDOS SENSIBLES DE DISCORD (puntuación, administración, calendario, eventos)
+####################################
+
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
     if not is_owner_and_allowed(ctx):
@@ -640,16 +639,10 @@ async def saltar_etapa(ctx, etapa: int):
         pass
 
 ######################################
-# COMANDO !trivia (disponible para OWNER_ID en DM o en canal permitido)
+# COMANDOS PÚBLICOS (chistes y trivia) – disponibles para cualquier usuario
 ######################################
 @bot.command()
 async def trivia(ctx):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
     if ctx.channel.id in active_trivia:
         del active_trivia[ctx.channel.id]
     trivia_item = get_random_trivia()
@@ -665,7 +658,7 @@ async def chiste(ctx):
     await ctx.send(get_random_joke())
 
 ######################################
-# COMANDOS SENSIBLES PARA GESTIÓN DE CHISTES, TRIVIAS Y EVENTOS (solo OWNER_ID, en DM o en canal 1338126297666424874)
+# COMANDOS SENSIBLES PARA GESTIÓN DE CHISTES, TRIVIAS Y EVENTOS (solo OWNER_ID, en DM o en canal PUBLIC_CHANNEL_ID)
 ######################################
 @bot.command()
 async def agregar_chiste(ctx, *, chiste_text: str):
@@ -925,6 +918,37 @@ async def notificar_evento(ctx, event_id: int):
     except:
         pass
 
+# NUEVO COMANDO: LISTAR EVENTOS (para OWNER_ID)
+@bot.command()
+async def ver_eventos(ctx):
+    if not is_owner_and_allowed(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM calendar_events ORDER BY event_datetime ASC")
+        events = cur.fetchall()
+    if not events:
+        await send_public_message("No hay eventos registrados.")
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    message_lines = ["**Lista de Eventos Registrados:**"]
+    for event in events:
+        event_dt = event["event_datetime"]
+        line = f"ID: {event['id']} | Nombre: {event['name']} | Fecha: {event_dt.strftime('%d/%m/%Y %H:%M')} | Etapa: {event['target_stage']}"
+        message_lines.append(line)
+    full_message = "\n".join(message_lines)
+    await send_public_message(full_message)
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
 ######################################
 # TAREA EN SEGUNDO PLANO: RECORDATORIOS AUTOMÁTICOS
 ######################################
@@ -1076,6 +1100,7 @@ async def on_message(message):
                 "   - **!agregar_evento [nombre] | [DD/MM/YYYY] | [HH:MM] | [etapa]:** Agrega un evento al calendario.\n"
                 "   - **!eliminar_evento [id]:** Elimina un evento del calendario.\n"
                 "   - **!notificar_evento [id]:** Envía notificación inicial por DM a los participantes de la etapa indicada en el evento.\n"
+                "   - **!ver_eventos:** Muestra la lista de eventos registrados con su ID.\n"
             )
         await message.channel.send(help_text)
         return
