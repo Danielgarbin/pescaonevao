@@ -63,15 +63,9 @@ def init_db():
                 url TEXT NOT NULL
             )
         """)
-        # Se asume que la tabla 'registrations' ya existe en la base de datos para almacenar el país de los usuarios
-        # Ejemplo:
-        # CREATE TABLE IF NOT EXISTS registrations (
-        #    user_id TEXT PRIMARY KEY,
-        #    discord_name TEXT,
-        #    fortnite_username TEXT,
-        #    platform TEXT,
-        #    country TEXT
-        # );
+        # No se modifica (ni se crea) la tabla calendar_events para no alterar la base de datos existente.
+        # Se asume que la tabla 'calendar_events' ya existe y que la columna de fecha se llama "fecha".
+        # Asimismo, se asume que la tabla 'registrations' ya existe para almacenar el país de los usuarios.
 init_db()
 
 ######################################
@@ -79,7 +73,6 @@ init_db()
 ######################################
 PREFIX = '!'
 # Configuración de etapas: cada etapa tiene un número determinado de jugadores.
-# Se agregan las etapas 7 y 8.
 STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14, 6: 1, 7: 1, 8: 1}
 current_stage = 1
 stage_names = {
@@ -180,7 +173,7 @@ def normalize_string(s):
     return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
 
 ######################################
-# LISTAS DE CHISTES Y TRIVIAS (sin cambios)
+# LISTAS DE CHISTES Y TRIVIAS
 ######################################
 ALL_JOKES = [
     "¿Por qué los programadores confunden Halloween y Navidad? Porque OCT 31 == DEC 25.",
@@ -210,6 +203,21 @@ def get_random_trivia():
     return trivia
 
 ######################################
+# HELPER: Formatear la fecha del evento
+######################################
+def format_event_date(event):
+    # Se asume que en la tabla calendar_events la columna que almacena la fecha se llama "fecha"
+    if "fecha" in event and event["fecha"]:
+        try:
+            event_dt = event["fecha"]
+            if not isinstance(event_dt, datetime.datetime):
+                event_dt = datetime.datetime.fromisoformat(event_dt)
+            return event_dt.strftime('%d/%m/%Y %H:%M')
+        except Exception as e:
+            return str(event["fecha"])
+    return "Fecha no definida"
+
+######################################
 # CONFIGURACIÓN DEL BOT CON PREFIJOS PERSONALIZADOS
 ######################################
 def get_prefix(bot, message):
@@ -224,7 +232,7 @@ intents = discord.Intents.default()
 intents.members = True
 intents.messages = True
 intents.message_content = True
-bot = commands.Bot(command_prefix=get_prefix, intents=intents)
+bot = commands.Bot(command_prefix=get_prefix, intents=intents, case_insensitive=True)
 
 async def send_public_message(message: str, view: discord.ui.View = None):
     public_channel = bot.get_channel(PUBLIC_CHANNEL_ID)
@@ -322,7 +330,7 @@ def api_set_stage():
 # COMANDOS SENSIBLES (solo OWNER_ID, en DM o en canal privado)
 ######################################
 def is_owner_and_allowed(ctx):
-    # Sólo se permiten si el autor es OWNER y el comando se envía por DM o en el canal privado
+    # Se permiten solo si el autor es OWNER y el comando se envía por DM o en el canal privado
     return ctx.author.id == OWNER_ID and (ctx.guild is None or ctx.channel.id == PRIVATE_CHANNEL_ID)
 
 @bot.command()
@@ -557,7 +565,7 @@ async def saltar_etapa(ctx, etapa: int):
     await send_public_message(f"✅ Etapa saltada. Ahora la etapa es {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
 
 ######################################
-# COMANDOS PÚBLICOS (chistes y trivia) – disponibles para cualquier usuario
+# COMANDOS PÚBLICOS (chistes y trivia)
 ######################################
 @bot.command()
 async def trivia(ctx):
@@ -612,7 +620,8 @@ async def agregar_evento(ctx, *, evento_data: str):
         await send_public_message("❌ Error: La etapa debe ser un número.")
         return
     with conn.cursor() as cur:
-        cur.execute("INSERT INTO calendar_events (name, event_datetime, target_stage) VALUES (%s, %s, %s) RETURNING id", (name, event_dt, target_stage))
+        # Se asume que en la tabla calendar_events la columna de fecha se llama "fecha"
+        cur.execute("INSERT INTO calendar_events (name, fecha, target_stage) VALUES (%s, %s, %s) RETURNING id", (name, event_dt, target_stage))
         event_id = cur.fetchone()[0]
     await send_public_message(f"✅ Evento agregado con ID {event_id}: **{name}** para {event_dt.strftime('%d/%m/%Y %H:%M')} dirigido a la etapa {target_stage}.")
 
@@ -666,7 +675,7 @@ async def notificar_evento(ctx, event_id: int = None):
                 country_str = f" {reg['country']}"
             else:
                 country_str = ""
-            event_time_str = event['event_datetime'].strftime('%d/%m/%Y %H:%M') + country_str
+            event_time_str = format_event_date(event) + country_str
             await member.send(f"📅 Notificación de evento: **{event['name']}** se realizará el {event_time_str}. ¡No te lo pierdas!")
             count += 1
             await asyncio.sleep(1)
@@ -682,10 +691,10 @@ class EventSelectionView(discord.ui.View):
         self.ctx = ctx
         options = []
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT id, name, event_datetime, target_stage FROM calendar_events ORDER BY event_datetime ASC")
+            cur.execute("SELECT id, name, fecha, target_stage FROM calendar_events ORDER BY fecha ASC")
             events = cur.fetchall()
         for event in events:
-            dt_str = event["event_datetime"].strftime("%d/%m/%Y %H:%M")
+            dt_str = format_event_date(event)
             option_label = f"ID: {event['id']} | {event['name']} ({dt_str})"
             options.append(discord.SelectOption(label=option_label, value=str(event["id"])))
         select = discord.ui.Select(placeholder="Selecciona un evento...", options=options)
@@ -705,15 +714,15 @@ async def ver_eventos(ctx):
             pass
         return
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT * FROM calendar_events ORDER BY event_datetime ASC")
+        cur.execute("SELECT * FROM calendar_events ORDER BY fecha ASC")
         events = cur.fetchall()
     if not events:
         await send_public_message("No hay eventos registrados.")
         return
     message_lines = ["**Lista de Eventos Registrados:**"]
     for event in events:
-        event_dt = event["event_datetime"]
-        line = f"ID: {event['id']} | Nombre: {event['name']} | Fecha: {event_dt.strftime('%d/%m/%Y %H:%M')} | Etapa: {event['target_stage']}"
+        fecha_str = format_event_date(event)
+        line = f"ID: {event['id']} | Nombre: {event['name']} | Fecha: {fecha_str} | Etapa: {event['target_stage']}"
         message_lines.append(line)
     full_message = "\n".join(message_lines)
     await send_public_message(full_message)
@@ -774,7 +783,7 @@ async def agregar_registro_manual(ctx, *, data_str: str):
 @bot.event
 async def on_message(message):
     global forwarding_enabled
-    # Si es DM del campeón (y se debe reenviar) se reenvía el mensaje
+    # Reenvío de mensajes del campeón si es DM
     if message.guild is None and champion_id is not None and message.author.id == champion_id and forwarding_enabled:
         try:
             forward_channel = bot.get_channel(1338610365327474690)
@@ -782,7 +791,7 @@ async def on_message(message):
                 await forward_channel.send(f"**Mensaje del Campeón:** {message.content}")
         except Exception as e:
             print(f"Error forwarding message: {e}")
-    # Si el mensaje empieza con "!" se procesa el comando
+    # Si el mensaje comienza con "!", se procesa el comando
     if message.content.startswith("!"):
         if message.author.id != OWNER_ID:
             try:
