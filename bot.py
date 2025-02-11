@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo  # Para trabajar con zonas horarias
 # CONFIGURACIÓN: IDs y Servidor
 ######################################
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
-PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles (no se utiliza en la versión final)
+PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles
 SPECIAL_HELP_CHANNEL = 1338608387197243422  # Canal especial para que el owner reciba la lista extendida de comandos
 GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
@@ -210,13 +210,21 @@ def get_random_trivia():
     return trivia
 
 ######################################
-# INICIALIZACIÓN DEL BOT
+# CONFIGURACIÓN DEL BOT CON PREFIJOS PERSONALIZADOS
 ######################################
+def get_prefix(bot, message):
+    prefixes = [PREFIX]
+    content = message.content.strip().lower()
+    # Si el mensaje es exactamente uno de estos comandos, se permite no usar prefijo
+    if content in ["trivia", "chiste", "chistes", "comandos"]:
+        prefixes.append('')
+    return prefixes
+
 intents = discord.Intents.default()
 intents.members = True
 intents.messages = True
 intents.message_content = True
-bot = commands.Bot(command_prefix=PREFIX, intents=intents)
+bot = commands.Bot(command_prefix=get_prefix, intents=intents)
 
 async def send_public_message(message: str, view: discord.ui.View = None):
     public_channel = bot.get_channel(PUBLIC_CHANNEL_ID)
@@ -311,10 +319,11 @@ def api_set_stage():
     return jsonify({"message": "Etapa configurada", "stage": stage}), 200
 
 ######################################
-# COMANDOS SENSIBLES (solo OWNER_ID, en DM o en canal PUBLIC_CHANNEL_ID)
+# COMANDOS SENSIBLES (solo OWNER_ID, en DM o en canal privado)
 ######################################
 def is_owner_and_allowed(ctx):
-    return ctx.author.id == OWNER_ID and (ctx.guild is None or ctx.channel.id == PUBLIC_CHANNEL_ID)
+    # Sólo se permiten si el autor es OWNER y el comando se envía por DM o en el canal privado
+    return ctx.author.id == OWNER_ID and (ctx.guild is None or ctx.channel.id == PRIVATE_CHANNEL_ID)
 
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
@@ -327,19 +336,11 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
     match = re.search(r'\d+', jugador)
     if not match:
         await send_public_message("No se pudo encontrar al miembro.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     member_id = int(match.group())
     guild = ctx.guild or bot.get_guild(GUILD_ID)
     if guild is None:
         await send_public_message("No se pudo determinar el servidor.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     try:
         member = guild.get_member(member_id)
@@ -347,26 +348,14 @@ async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
             member = await guild.fetch_member(member_id)
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro en el servidor.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     try:
         puntos = int(puntos)
     except ValueError:
         await send_public_message("Por favor, proporciona un número válido de puntos.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     new_points = update_score(member, puntos)
     await send_public_message(f"✅ Puntuación actualizada: {member.display_name} ahora tiene {new_points} puntos")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 @bot.command()
 async def reducir_puntuacion(ctx, jugador: str, puntos: int):
@@ -377,10 +366,6 @@ async def reducir_puntuacion(ctx, jugador: str, puntos: int):
             pass
         return
     await actualizar_puntuacion(ctx, jugador, -puntos)
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 @bot.command()
 async def ver_puntuacion(ctx):
@@ -414,10 +399,6 @@ async def avanzar_etapa(ctx):
     cutoff = STAGES.get(current_stage)
     if cutoff is None:
         await send_public_message("No hay configuración para esta etapa.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     avanzan = sorted_players[:cutoff]
     eliminados = sorted_players[cutoff:]
@@ -461,10 +442,6 @@ async def avanzar_etapa(ctx):
         except Exception as e:
             print(f"Error al enviar mensaje a {uid}: {e}")
     await send_public_message(f"✅ Etapa {current_stage} iniciada. {cutoff} jugadores avanzaron y {len(eliminados)} fueron eliminados.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 @bot.command()
 async def retroceder_etapa(ctx):
@@ -477,10 +454,6 @@ async def retroceder_etapa(ctx):
     global current_stage, champion_id, forwarding_enabled, forwarding_end_time
     if current_stage <= 1:
         await send_public_message("No se puede retroceder de la etapa 1.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     current_stage -= 1
     data = get_all_participants()
@@ -492,10 +465,6 @@ async def retroceder_etapa(ctx):
         forwarding_enabled = False
         forwarding_end_time = None
     await send_public_message(f"✅ Etapa retrocedida. Ahora la etapa es {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 @bot.command()
 async def eliminar_jugador(ctx, jugador: str):
@@ -508,37 +477,21 @@ async def eliminar_jugador(ctx, jugador: str):
     match = re.search(r'\d+', jugador)
     if not match:
         await send_public_message("No se pudo encontrar al miembro.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     member_id = int(match.group())
     guild = ctx.guild or bot.get_guild(GUILD_ID)
     if guild is None:
         await send_public_message("No se pudo determinar el servidor.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     try:
         member = guild.get_member(member_id) or await guild.fetch_member(member_id)
     except Exception as e:
         await send_public_message("No se pudo encontrar al miembro en el servidor.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     user_id = str(member.id)
     with conn.cursor() as cur:
         cur.execute("DELETE FROM participants WHERE id = %s", (user_id,))
     await send_public_message(f"✅ {member.display_name} eliminado del torneo")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 @bot.command()
 async def configurar_etapa(ctx, etapa: int):
@@ -555,10 +508,6 @@ async def configurar_etapa(ctx, etapa: int):
         forwarding_enabled = False
         forwarding_end_time = None
     await send_public_message(f"✅ Etapa actual configurada a {etapa}")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 @bot.command()
 async def saltar_etapa(ctx, etapa: int):
@@ -606,10 +555,6 @@ async def saltar_etapa(ctx, etapa: int):
                 forwarding_enabled = False
                 forwarding_end_time = None
     await send_public_message(f"✅ Etapa saltada. Ahora la etapa es {current_stage} ({stage_names.get(current_stage, 'Etapa ' + str(current_stage))}).")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 ######################################
 # COMANDOS PÚBLICOS (chistes y trivia) – disponibles para cualquier usuario
@@ -629,6 +574,10 @@ async def trivia(ctx):
 @bot.command()
 async def chiste(ctx):
     await ctx.send(get_random_joke())
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
 ######################################
 # COMANDOS SENSIBLES PARA GESTIÓN DE CALENDARIO (EVENTOS) – SOLO OWNER_ID
@@ -666,10 +615,6 @@ async def agregar_evento(ctx, *, evento_data: str):
         cur.execute("INSERT INTO calendar_events (name, event_datetime, target_stage) VALUES (%s, %s, %s) RETURNING id", (name, event_dt, target_stage))
         event_id = cur.fetchone()[0]
     await send_public_message(f"✅ Evento agregado con ID {event_id}: **{name}** para {event_dt.strftime('%d/%m/%Y %H:%M')} dirigido a la etapa {target_stage}.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 @bot.command()
 async def eliminar_evento(ctx, event_id: int):
@@ -685,12 +630,7 @@ async def eliminar_evento(ctx, event_id: int):
             await send_public_message(f"✅ Evento con ID {event_id} eliminado.")
         else:
             await send_public_message(f"❌ No se encontró el evento con ID {event_id}.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
-# MODIFICACIÓN: notificar_evento ahora permite seleccionar el evento (si no se pasa el ID, muestra un menú interactivo)
 @bot.command()
 async def notificar_evento(ctx, event_id: int = None):
     if not is_owner_and_allowed(ctx):
@@ -709,7 +649,6 @@ async def notificar_evento(ctx, event_id: int = None):
     if not event:
         await send_public_message(f"❌ No se encontró el evento con ID {event_id}.")
         return
-    # Aquí ya no dependemos de que se haya notificado manualmente; los recordatorios se enviarán automáticamente
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM participants WHERE etapa = %s", (event["target_stage"],))
         participants = cur.fetchall()
@@ -720,7 +659,6 @@ async def notificar_evento(ctx, event_id: int = None):
             member = guild.get_member(int(participant["id"]))
             if member is None:
                 member = await guild.fetch_member(int(participant["id"]))
-            # Consultar el país del usuario en la tabla 'registrations'
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur_reg:
                 cur_reg.execute("SELECT country FROM registrations WHERE user_id = %s", (str(participant["id"]),))
                 reg = cur_reg.fetchone()
@@ -734,14 +672,9 @@ async def notificar_evento(ctx, event_id: int = None):
             await asyncio.sleep(1)
         except Exception as e:
             print(f"Error notificar_evento a {participant['id']}: {e}")
-    # Se marca la notificación inicial como enviada (aunque ahora el recordatorio automático se enviará sin intervención previa)
     with conn.cursor() as cur:
         cur.execute("UPDATE calendar_events SET initial_notified = TRUE WHERE id = %s", (event_id,))
     await send_public_message(f"✅ Notificación enviada a {count} participantes para el evento ID {event_id}.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 class EventSelectionView(discord.ui.View):
     def __init__(self, ctx):
@@ -776,10 +709,6 @@ async def ver_eventos(ctx):
         events = cur.fetchall()
     if not events:
         await send_public_message("No hay eventos registrados.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     message_lines = ["**Lista de Eventos Registrados:**"]
     for event in events:
@@ -788,10 +717,6 @@ async def ver_eventos(ctx):
         message_lines.append(line)
     full_message = "\n".join(message_lines)
     await send_public_message(full_message)
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 ######################################
 # COMANDOS DE ADMINISTRACIÓN PARA REGISTROS (solo OWNER_ID)
@@ -809,10 +734,6 @@ async def lista_registros(ctx):
         rows = cur.fetchall()
     if not rows:
         await send_public_message("No hay registros.")
-        try:
-            await ctx.message.delete()
-        except:
-            pass
         return
     lines = ["**Lista de Registros:**"]
     for row in rows:
@@ -820,10 +741,6 @@ async def lista_registros(ctx):
         lines.append(line)
     full_message = "\n".join(lines)
     await send_public_message(full_message)
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 @bot.command()
 async def agregar_registro_manual(ctx, *, data_str: str):
@@ -850,10 +767,6 @@ async def agregar_registro_manual(ctx, *, data_str: str):
                 country = EXCLUDED.country
         """, (user_id, discord_name, fortnite_username, platform, country))
     await send_public_message("✅ Registro manual agregado.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
 ######################################
 # EVENTO ON_MESSAGE: Comandos de Lenguaje Natural y reenvío de DMs del campeón
@@ -861,29 +774,25 @@ async def agregar_registro_manual(ctx, *, data_str: str):
 @bot.event
 async def on_message(message):
     global forwarding_enabled
+    # Si es DM del campeón (y se debe reenviar) se reenvía el mensaje
     if message.guild is None and champion_id is not None and message.author.id == champion_id and forwarding_enabled:
-        if forwarding_end_time is not None and datetime.datetime.utcnow() > forwarding_end_time:
-            forwarding_enabled = False
-        else:
-            try:
-                forward_channel = bot.get_channel(1338610365327474690)
-                if forward_channel:
-                    await forward_channel.send(f"**Mensaje del Campeón:** {message.content}")
-            except Exception as e:
-                print(f"Error forwarding message: {e}")
-    if message.content.startswith("!") and message.author.id != OWNER_ID:
         try:
-            await message.delete()
-        except:
-            pass
-        return
-    if message.content.startswith("!") and message.author.id == OWNER_ID:
+            forward_channel = bot.get_channel(1338610365327474690)
+            if forward_channel:
+                await forward_channel.send(f"**Mensaje del Campeón:** {message.content}")
+        except Exception as e:
+            print(f"Error forwarding message: {e}")
+    # Si el mensaje empieza con "!" se procesa el comando
+    if message.content.startswith("!"):
+        if message.author.id != OWNER_ID:
+            try:
+                await message.delete()
+            except:
+                pass
         await bot.process_commands(message)
         return
     if message.author.bot:
         return
-    def normalize_string_local(s):
-        return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
     await bot.process_commands(message)
 
 ######################################
