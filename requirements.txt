@@ -2,3 +2,9 @@ discord.py
 Flask
 psycopg2-binary
 dateparser==1.1.8
+psycopg2
+psycopg2.extras
+threading
+unicodedata
+asyncio
+datetime
