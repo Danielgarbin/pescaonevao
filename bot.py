@@ -64,7 +64,7 @@ def init_db():
             )
         """)
         # No se modifica (ni se crea) la tabla calendar_events para no alterar la base de datos existente.
-        # Se asume que la tabla 'calendar_events' ya existe y que la columna de fecha se llama "fecha".
+        # Se asume que la tabla 'calendar_events' ya existe y que la columna que almacena la fecha se llama "fecha".
         # Asimismo, se asume que la tabla 'registrations' ya existe para almacenar el país de los usuarios.
 init_db()
 
