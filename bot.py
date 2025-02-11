@@ -20,7 +20,7 @@ OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para c
 PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles
 SPECIAL_HELP_CHANNEL = 1338608387197243422  # Canal especial para que el owner reciba la lista extendida de comandos
-GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
+GUILD_ID = 1337387112403697694            # REEMPLAZA con el ID real de tu servidor (guild)
 
 API_SECRET = os.environ.get("API_SECRET")  # Para la API privada (opcional)
 
