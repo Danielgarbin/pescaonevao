@@ -11,15 +11,16 @@ import unicodedata
 import asyncio  # Para usar asyncio.sleep
 import datetime  # Para gestionar fechas y tiempos
 from flask import Flask, request, jsonify
+from zoneinfo import ZoneInfo  # Para trabajar con zonas horarias
 
 ######################################
 # CONFIGURACIÓN: IDs y Servidor
 ######################################
 OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para comandos sensibles)
 PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles (no se utiliza en la versión final)
-PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles (para activar comandos sensibles)
+PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles
 SPECIAL_HELP_CHANNEL = 1338608387197243422  # Canal especial para que el owner reciba la lista extendida de comandos
-GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
+GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor
 
 API_SECRET = os.environ.get("API_SECRET")  # Para la API privada (opcional)
 
@@ -62,18 +63,14 @@ def init_db():
                 url TEXT NOT NULL
             )
         """)
-        # Tabla para eventos del calendario:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS calendar_events (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                event_datetime TIMESTAMP NOT NULL,
-                target_stage INTEGER NOT NULL,
-                initial_notified BOOLEAN DEFAULT FALSE,
-                day_reminder_sent BOOLEAN DEFAULT FALSE,
-                two_hour_reminder_sent BOOLEAN DEFAULT FALSE
-            )
-        """)
+        # Se asume que existe una tabla 'registrations' para almacenar el país de los usuarios:
+        # CREATE TABLE IF NOT EXISTS registrations (
+        #    user_id TEXT PRIMARY KEY,
+        #    discord_name TEXT,
+        #    fortnite_username TEXT,
+        #    platform TEXT,
+        #    country TEXT
+        # );
 init_db()
 
 ######################################
@@ -81,6 +78,7 @@ init_db()
 ######################################
 PREFIX = '!'
 # Configuración de etapas: cada etapa tiene un número determinado de jugadores.
+# Se agregan las etapas 7 y 8.
 STAGES = {1: 60, 2: 48, 3: 32, 4: 24, 5: 14, 6: 1, 7: 1, 8: 1}
 current_stage = 1
 stage_names = {
@@ -103,12 +101,6 @@ forwarding_end_time = None
 # VARIABLE GLOBAL PARA TRIVIA
 ######################################
 active_trivia = {}  # key: channel.id, value: {"question": ..., "answer": ..., "hint": ...}
-
-######################################
-# VARIABLES GLOBALES PARA SELECCIÓN NO REPETITIVA DE CHISTES Y TRIVIAS
-######################################
-unused_jokes = []
-unused_trivias = []
 
 ######################################
 # FUNCIONES PARA LA BASE DE DATOS
@@ -187,48 +179,34 @@ def normalize_string(s):
     return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
 
 ######################################
-# FUNCIONES PARA CHISTES, TRIVIAS Y MEMES (USANDO LA BASE DE DATOS) CON SELECCIÓN NO REPETITIVA
+# LISTAS DE CHISTES Y TRIVIAS (sin cambios)
 ######################################
-def get_all_jokes():
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-         cur.execute("SELECT id, content FROM jokes")
-         return cur.fetchall()
+ALL_JOKES = [
+    "¿Por qué los programadores confunden Halloween y Navidad? Porque OCT 31 == DEC 25.",
+]
+unused_jokes = ALL_JOKES.copy()
 
 def get_random_joke():
-    global unused_jokes
+    global unused_jokes, ALL_JOKES
     if not unused_jokes:
-         all_jokes = get_all_jokes()
-         if not all_jokes:
-             return "No hay chistes disponibles en este momento."
-         unused_jokes = all_jokes.copy()
-    selected = random.choice(unused_jokes)
-    unused_jokes.remove(selected)
-    return selected["content"]
+        unused_jokes = ALL_JOKES.copy()
+    joke = random.choice(unused_jokes)
+    unused_jokes.remove(joke)
+    return joke
 
-def get_all_trivias():
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-         cur.execute("SELECT id, question, answer, hint FROM trivias")
-         return cur.fetchall()
+ALL_TRIVIA = [
+    {"question": "¿Quién escribió 'Cien Años de Soledad'?", "answer": "gabriel garcía márquez", "hint": "Comienza con 'Gabriel'."},
+    {"question": "¿Cuál es el río más largo del mundo?", "answer": "amazonas", "hint": "Comienza con 'A'."},
+]
+unused_trivia = ALL_TRIVIA.copy()
 
 def get_random_trivia():
-    global unused_trivias
-    if not unused_trivias:
-         all_trivias = get_all_trivias()
-         if not all_trivias:
-             return {"question": "No hay trivias disponibles en este momento.", "answer": "", "hint": ""}
-         unused_trivias = all_trivias.copy()
-    selected = random.choice(unused_trivias)
-    unused_trivias.remove(selected)
-    return {"question": selected["question"], "answer": selected["answer"], "hint": selected["hint"]}
-
-def get_random_meme():
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT url FROM memes ORDER BY random() LIMIT 1")
-        result = cur.fetchone()
-        if result:
-            return result["url"]
-        else:
-            return "No hay memes disponibles en este momento."
+    global unused_trivia, ALL_TRIVIA
+    if not unused_trivia:
+        unused_trivia = ALL_TRIVIA.copy()
+    trivia = random.choice(unused_trivia)
+    unused_trivia.remove(trivia)
+    return trivia
 
 ######################################
 # INICIALIZACIÓN DEL BOT
@@ -239,10 +217,10 @@ intents.messages = True
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
-async def send_public_message(message: str):
+async def send_public_message(message: str, view: discord.ui.View = None):
     public_channel = bot.get_channel(PUBLIC_CHANNEL_ID)
     if public_channel:
-        await public_channel.send(message)
+        await public_channel.send(message, view=view)
     else:
         print("No se pudo encontrar el canal público.")
 
@@ -332,16 +310,10 @@ def api_set_stage():
     return jsonify({"message": "Etapa configurada", "stage": stage}), 200
 
 ######################################
-# RESTRICCIÓN PARA COMANDOS SENSIBLES
-# Estos comandos (de puntuación, administración, calendario y notificaciones)
-# sólo pueden ser usados por OWNER_ID desde DM o en el canal con ID PUBLIC_CHANNEL_ID (1338126297666424874)
+# COMANDOS SENSIBLES (solo OWNER_ID, en DM o en canal PUBLIC_CHANNEL_ID)
 ######################################
 def is_owner_and_allowed(ctx):
     return ctx.author.id == OWNER_ID and (ctx.guild is None or ctx.channel.id == PUBLIC_CHANNEL_ID)
-
-######################################
-# COMANDOS SENSIBLES DE DISCORD (puntuación, administración, calendario, eventos)
-####################################
 
 @bot.command()
 async def actualizar_puntuacion(ctx, jugador: str, puntos: int):
@@ -425,7 +397,7 @@ async def clasificacion(ctx):
     for idx, (uid, player) in enumerate(sorted_players, 1):
         ranking += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
     await ctx.send(ranking)
-
+    
 @bot.command()
 async def avanzar_etapa(ctx):
     if not is_owner_and_allowed(ctx):
@@ -658,171 +630,9 @@ async def chiste(ctx):
     await ctx.send(get_random_joke())
 
 ######################################
-# COMANDOS SENSIBLES PARA GESTIÓN DE CHISTES, TRIVIAS Y EVENTOS (solo OWNER_ID, en DM o en canal PUBLIC_CHANNEL_ID)
-######################################
-@bot.command()
-async def agregar_chiste(ctx, *, chiste_text: str):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    with conn.cursor() as cur:
-        cur.execute("INSERT INTO jokes (content) VALUES (%s) RETURNING id", (chiste_text,))
-        joke_id = cur.fetchone()[0]
-    await send_public_message(f"✅ Chiste agregado con ID {joke_id}.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
+# COMANDOS SENSIBLES PARA GESTIÓN DE CALENDARIO (EVENTOS) – SOLO OWNER_ID
+####################################
 
-@bot.command()
-async def eliminar_chiste(ctx, joke_id: int):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM jokes WHERE id = %s", (joke_id,))
-        if cur.rowcount > 0:
-            await send_public_message(f"✅ Chiste con ID {joke_id} eliminado.")
-        else:
-            await send_public_message(f"❌ No se encontró un chiste con ID {joke_id}.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-@bot.command()
-async def agregar_chistes_masivos(ctx, *, chistes_text: str):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    chistes = [line.strip() for line in chistes_text.split("\n") if line.strip()]
-    if not chistes:
-        await send_public_message("❌ No se encontraron chistes para agregar.")
-        return
-    with conn.cursor() as cur:
-        for chiste in chistes:
-            cur.execute("INSERT INTO jokes (content) VALUES (%s)", (chiste,))
-    await send_public_message(f"✅ Se agregaron {len(chistes)} chistes.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-@bot.command()
-async def agregar_trivia(ctx, *, trivia_data: str):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    parts = [part.strip() for part in trivia_data.split("|")]
-    if len(parts) < 2:
-        await send_public_message("❌ Formato incorrecto. Usa: pregunta | respuesta | [pista]")
-        return
-    question = parts[0]
-    answer = parts[1]
-    hint = parts[2] if len(parts) >= 3 else ""
-    with conn.cursor() as cur:
-        cur.execute("INSERT INTO trivias (question, answer, hint) VALUES (%s, %s, %s) RETURNING id", (question, answer, hint))
-        trivia_id = cur.fetchone()[0]
-    await send_public_message(f"✅ Trivia agregada con ID {trivia_id}.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-@bot.command()
-async def eliminar_trivia(ctx, trivia_id: int):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM trivias WHERE id = %s", (trivia_id,))
-        if cur.rowcount > 0:
-            await send_public_message(f"✅ Trivia con ID {trivia_id} eliminada.")
-        else:
-            await send_public_message(f"❌ No se encontró una trivia con ID {trivia_id}.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-@bot.command()
-async def agregar_trivias_masivas(ctx, *, trivias_text: str):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    lines = [line.strip() for line in trivias_text.split("\n") if line.strip()]
-    count = 0
-    with conn.cursor() as cur:
-        for line in lines:
-            parts = [part.strip() for part in line.split("|")]
-            if len(parts) < 2:
-                continue
-            question = parts[0]
-            answer = parts[1]
-            hint = parts[2] if len(parts) >= 3 else ""
-            cur.execute("INSERT INTO trivias (question, answer, hint) VALUES (%s, %s, %s)", (question, answer, hint))
-            count += 1
-    await send_public_message(f"✅ Se agregaron {count} trivias.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-@bot.command()
-async def borrar_todos_chistes(ctx):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM jokes")
-    global unused_jokes
-    unused_jokes = []
-    await send_public_message("✅ Todos los chistes han sido borrados de la base de datos.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-@bot.command()
-async def borrar_todas_trivias(ctx):
-    if not is_owner_and_allowed(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        return
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM trivias")
-    global unused_trivias
-    unused_trivias = []
-    await send_public_message("✅ Todas las trivias han sido borradas de la base de datos.")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-# COMANDOS PARA CALENDARIO (EVENTOS)
 @bot.command()
 async def agregar_evento(ctx, *, evento_data: str):
     if not is_owner_and_allowed(ctx):
@@ -841,7 +651,9 @@ async def agregar_evento(ctx, *, evento_data: str):
     time_str = parts[2]
     stage_str = parts[3]
     try:
+        tz = ZoneInfo("America/Lima")
         event_dt = datetime.datetime.strptime(f"{date_str} {time_str}", "%d/%m/%Y %H:%M")
+        event_dt = event_dt.replace(tzinfo=tz)
     except Exception as e:
         await send_public_message("❌ Error al parsear la fecha/hora. Usa formato DD/MM/YYYY y HH:MM.")
         return
@@ -878,13 +690,18 @@ async def eliminar_evento(ctx, event_id: int):
     except:
         pass
 
+# MODIFICACIÓN: notificar_evento ahora admite parámetro opcional; si no se pasa, se muestra un menú de selección.
 @bot.command()
-async def notificar_evento(ctx, event_id: int):
+async def notificar_evento(ctx, event_id: int = None):
     if not is_owner_and_allowed(ctx):
         try:
             await ctx.message.delete()
         except:
             pass
+        return
+    if event_id is None:
+        view = EventSelectionView(ctx)
+        await send_public_message("Selecciona el evento a notificar:", view=view)
         return
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM calendar_events WHERE id = %s", (event_id,))
@@ -905,7 +722,16 @@ async def notificar_evento(ctx, event_id: int):
             member = guild.get_member(int(participant["id"]))
             if member is None:
                 member = await guild.fetch_member(int(participant["id"]))
-            await member.send(f"📅 Notificación de evento: **{event['name']}** se realizará el {event['event_datetime'].strftime('%d/%m/%Y %H:%M')}. ¡No te lo pierdas!")
+            # Consultar el país del usuario en la tabla 'registrations'
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur_reg:
+                cur_reg.execute("SELECT country FROM registrations WHERE user_id = %s", (str(participant["id"]),))
+                reg = cur_reg.fetchone()
+            if reg and reg.get("country"):
+                country_str = f" {reg['country']}"
+            else:
+                country_str = ""
+            event_time_str = event['event_datetime'].strftime('%d/%m/%Y %H:%M') + country_str
+            await member.send(f"📅 Notificación de evento: **{event['name']}** se realizará el {event_time_str}. ¡No te lo pierdas!")
             count += 1
             await asyncio.sleep(1)
         except Exception as e:
@@ -918,7 +744,26 @@ async def notificar_evento(ctx, event_id: int):
     except:
         pass
 
-# NUEVO COMANDO: LISTAR EVENTOS (para OWNER_ID)
+class EventSelectionView(discord.ui.View):
+    def __init__(self, ctx):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        options = []
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT id, name, event_datetime, target_stage FROM calendar_events ORDER BY event_datetime ASC")
+            events = cur.fetchall()
+        for event in events:
+            dt_str = event["event_datetime"].strftime("%d/%m/%Y %H:%M")
+            option_label = f"ID: {event['id']} | {event['name']} ({dt_str})"
+            options.append(discord.SelectOption(label=option_label, value=str(event["id"])))
+        select = discord.ui.Select(placeholder="Selecciona un evento...", options=options)
+        async def select_callback(interaction: discord.Interaction):
+            selected_event_id = int(select.values[0])
+            await notificar_evento(self.ctx, event_id=selected_event_id)
+            await interaction.response.send_message(f"Notificando el evento ID {selected_event_id}.", ephemeral=True)
+        select.callback = select_callback
+        self.add_item(select)
+
 @bot.command()
 async def ver_eventos(ctx):
     if not is_owner_and_allowed(ctx):
@@ -950,52 +795,66 @@ async def ver_eventos(ctx):
         pass
 
 ######################################
-# TAREA EN SEGUNDO PLANO: RECORDATORIOS AUTOMÁTICOS
+# COMANDOS DE ADMINISTRACIÓN PARA REGISTROS (solo OWNER_ID)
 ######################################
-async def check_event_reminders():
-    await bot.wait_until_ready()
-    while not bot.is_closed():
-        now = datetime.datetime.utcnow()
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT * FROM calendar_events WHERE initial_notified = TRUE")
-            events = cur.fetchall()
-        for event in events:
-            event_dt = event["event_datetime"]
-            # Recordatorio de 1 día
-            if not event["day_reminder_sent"] and now >= event_dt - datetime.timedelta(days=1):
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("SELECT * FROM participants WHERE etapa = %s", (event["target_stage"],))
-                    participants = cur.fetchall()
-                for participant in participants:
-                    try:
-                        guild = bot.get_guild(GUILD_ID)
-                        member = guild.get_member(int(participant["id"]))
-                        if member is None:
-                            member = await guild.fetch_member(int(participant["id"]))
-                        await member.send(f"⏰ Recordatorio: Falta 1 día para el evento **{event['name']}** el {event_dt.strftime('%d/%m/%Y %H:%M')}.")
-                        await asyncio.sleep(1)
-                    except Exception as e:
-                        print(f"Error enviando recordatorio 1 día a {participant['id']}: {e}")
-                with conn.cursor() as cur:
-                    cur.execute("UPDATE calendar_events SET day_reminder_sent = TRUE WHERE id = %s", (event["id"],))
-            # Recordatorio de 2 horas
-            if not event["two_hour_reminder_sent"] and now >= event_dt - datetime.timedelta(hours=2):
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("SELECT * FROM participants WHERE etapa = %s", (event["target_stage"],))
-                    participants = cur.fetchall()
-                for participant in participants:
-                    try:
-                        guild = bot.get_guild(GUILD_ID)
-                        member = guild.get_member(int(participant["id"]))
-                        if member is None:
-                            member = await guild.fetch_member(int(participant["id"]))
-                        await member.send(f"⏰ Recordatorio: Falta 2 horas para el evento **{event['name']}** el {event_dt.strftime('%d/%m/%Y %H:%M')}.")
-                        await asyncio.sleep(1)
-                    except Exception as e:
-                        print(f"Error enviando recordatorio 2 horas a {participant['id']}: {e}")
-                with conn.cursor() as cur:
-                    cur.execute("UPDATE calendar_events SET two_hour_reminder_sent = TRUE WHERE id = %s", (event["id"],))
-        await asyncio.sleep(60)
+@bot.command()
+async def lista_registros(ctx):
+    if not is_owner_and_allowed(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute("SELECT * FROM registrations ORDER BY discord_name ASC")
+        rows = cur.fetchall()
+    if not rows:
+        await send_public_message("No hay registros.")
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    lines = ["**Lista de Registros:**"]
+    for row in rows:
+        line = f"Discord: {row['discord_name']} (ID: {row['user_id']}) | Fortnite: {row['fortnite_username']} | Plataforma: {row['platform']} | País: {row['country']}"
+        lines.append(line)
+    full_message = "\n".join(lines)
+    await send_public_message(full_message)
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+@bot.command()
+async def agregar_registro_manual(ctx, *, data_str: str):
+    if not is_owner_and_allowed(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        return
+    # Formato: discord_user_id | discord_name | fortnite_username | platform | country
+    parts = [part.strip() for part in data_str.split("|")]
+    if len(parts) < 5:
+        await send_public_message("❌ Formato incorrecto. Usa: discord_user_id | discord_name | fortnite_username | platform | country")
+        return
+    user_id, discord_name, fortnite_username, platform, country = parts
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO registrations (user_id, discord_name, fortnite_username, platform, country)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE SET
+                discord_name = EXCLUDED.discord_name,
+                fortnite_username = EXCLUDED.fortnite_username,
+                platform = EXCLUDED.platform,
+                country = EXCLUDED.country
+        """, (user_id, discord_name, fortnite_username, platform, country))
+    await send_public_message("✅ Registro manual agregado.")
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
 ######################################
 # EVENTO ON_MESSAGE: Comandos de Lenguaje Natural y reenvío de DMs del campeón
@@ -1024,162 +883,8 @@ async def on_message(message):
         return
     if message.author.bot:
         return
-    global stage_names, current_stage, active_trivia
     def normalize_string_local(s):
         return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c)).replace(" ", "").lower()
-    content = message.content.strip().lower()
-    if content == "ranking":
-        data = get_all_participants()
-        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
-        user_id = str(message.author.id)
-        found = False
-        user_rank = 0
-        for rank, (uid, player) in enumerate(sorted_players, 1):
-            if uid == user_id:
-                user_rank = rank
-                found = True
-                break
-        stage_name = stage_names.get(current_stage, f"Etapa {current_stage}")
-        if found:
-            response = f"🏆 {message.author.display_name}, tu ranking en {stage_name} es el **{user_rank}** de {len(sorted_players)} y tienes {data['participants'][user_id].get('puntos', 0)} puntos."
-        else:
-            response = "❌ No estás registrado en el torneo."
-        await message.channel.send(response)
-        return
-    if content == "topmejores":
-        data = get_all_participants()
-        sorted_players = sorted(data["participants"].items(), key=lambda item: int(item[1].get("puntos", 0)), reverse=True)
-        stage_name = stage_names.get(current_stage, f"Etapa {current_stage}")
-        ranking_text = f"🏅 Top 10 Mejores de {stage_name}:\n"
-        for idx, (uid, player) in enumerate(sorted_players[:10], 1):
-            ranking_text += f"{idx}. {player['nombre']} - {player.get('puntos', 0)} puntos\n"
-        await message.channel.send(ranking_text)
-        return
-    if content == "topestrellas":
-        data = get_all_participants()
-        sorted_by_symbolic = sorted(data["participants"].items(), key=lambda item: int(item[1].get("symbolic", 0)), reverse=True)
-        ranking_text = "🌟 Top 10 Estrellas Simbólicas:\n"
-        for idx, (uid, player) in enumerate(sorted_by_symbolic[:10], 1):
-            ranking_text += f"{idx}. {player['nombre']} - {player.get('symbolic', 0)} estrellas\n"
-        await message.channel.send(ranking_text)
-        return
-    if content in ["comandos", "lista de comandos"]:
-        help_text = (
-            "**Resumen de Comandos (Lenguaje Natural):**\n\n"
-            "   - **ranking:** Muestra tu posición y puntaje del torneo.\n"
-            "   - **topmejores:** Muestra el ranking de los 10 jugadores con mayor puntaje del torneo.\n"
-            "   - **misestrellas:** Muestra cuántas estrellas simbólicas tienes.\n"
-            "   - **topestrellas:** Muestra el ranking de los 10 jugadores con más estrellas simbólicas.\n"
-            "   - **chiste** o **cuéntame un chiste:** Devuelve un chiste aleatorio.\n"
-            "   - **quiero jugar trivia / jugar trivia / trivia:** Inicia una partida de trivia; si respondes correctamente, ganas 1 estrella simbólica.\n"
-            "   - **oráculo** o **predicción:** Recibe una predicción divertida.\n"
-            "   - **meme** o **muéstrame un meme:** Muestra un meme aleatorio.\n"
-            "   - **juguemos piedra papel tijeras, yo elijo [tu elección]:** Juega a Piedra, Papel o Tijeras; si ganas, ganas 1 estrella simbólica.\n"
-            "   - **duelo de chistes contra @usuario:** Inicia un duelo de chistes; el ganador gana 1 estrella simbólica.\n"
-        )
-        if message.author.id == OWNER_ID:
-            help_text += "\n**Comandos Sensibles (!):**\n"
-            help_text += (
-                "   - **!actualizar_puntuacion [jugador] [puntos]:** Actualiza la puntuación de un jugador.\n"
-                "   - **!reducir_puntuacion [jugador] [puntos]:** Resta puntos a un jugador.\n"
-                "   - **!ver_puntuacion:** Muestra tu puntaje actual del torneo.\n"
-                "   - **!clasificacion:** Muestra la clasificación completa del torneo.\n"
-                "   - **!avanzar_etapa:** Avanza a la siguiente etapa del torneo y notifica a los jugadores.\n"
-                "   - **!retroceder_etapa:** Retrocede a la etapa anterior del torneo.\n"
-                "   - **!eliminar_jugador [jugador]:** Elimina a un jugador del torneo.\n"
-                "   - **!configurar_etapa [etapa]:** Configura manualmente la etapa actual del torneo.\n"
-                "   - **!saltar_etapa [etapa]:** Salta directamente a la etapa indicada.\n"
-                "   - **!agregar_chiste [chiste]:** Agrega un chiste a la base de datos.\n"
-                "   - **!eliminar_chiste [id]:** Elimina un chiste de la base de datos por su ID.\n"
-                "   - **!agregar_chistes_masivos [lista de chistes]:** Agrega múltiples chistes (cada chiste en una nueva línea).\n"
-                "   - **!agregar_trivia [pregunta] | [respuesta] | [pista]:** Agrega una trivia a la base de datos. La pista es opcional.\n"
-                "   - **!eliminar_trivia [id]:** Elimina una trivia de la base de datos por su ID.\n"
-                "   - **!agregar_trivias_masivas [lista de trivias]:** Agrega múltiples trivias (cada línea en formato: pregunta | respuesta | [pista]).\n"
-                "   - **!borrar_todos_chistes:** Elimina todos los chistes existentes en la base de datos.\n"
-                "   - **!borrar_todas_trivias:** Elimina todas las trivias existentes en la base de datos.\n"
-                "   - **!agregar_evento [nombre] | [DD/MM/YYYY] | [HH:MM] | [etapa]:** Agrega un evento al calendario.\n"
-                "   - **!eliminar_evento [id]:** Elimina un evento del calendario.\n"
-                "   - **!notificar_evento [id]:** Envía notificación inicial por DM a los participantes de la etapa indicada en el evento.\n"
-                "   - **!ver_eventos:** Muestra la lista de eventos registrados con su ID.\n"
-            )
-        await message.channel.send(help_text)
-        return
-    if content == "misestrellas":
-        participant = get_participant(str(message.author.id))
-        symbolic = 0
-        if participant:
-            try:
-                symbolic = int(participant.get("symbolic", 0))
-            except:
-                symbolic = 0
-        await message.channel.send(f"🌟 {message.author.display_name}, tienes {symbolic} estrellas simbólicas.")
-        return
-    if content in ["chiste", "cuéntame un chiste"]:
-        await message.channel.send(get_random_joke())
-        return
-    if any(phrase in content for phrase in ["quiero jugar trivia", "jugar trivia", "trivia"]):
-        trivia_item = get_random_trivia()
-        active_trivia[message.channel.id] = trivia_item
-        await message.channel.send(f"**Trivia:** {trivia_item['question']}\n_Responde en el chat._")
-        return
-    if message.channel.id in active_trivia:
-        trivia_item = active_trivia[message.channel.id]
-        normalized_msg = normalize_string_local(message.content.strip())
-        if normalized_msg in ["nose", "ayuda", "ayudame", "ayudarme", "pista"]:
-            await message.channel.send(f"Pista: {trivia_item.get('hint', 'No hay pista disponible.')}")
-            return
-        if normalized_msg == normalize_string_local(trivia_item['answer']):
-            symbolic = award_symbolic_reward(message.author, 1)
-            response = f"🎉 ¡Correcto, {message.author.display_name}! Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
-            await message.channel.send(response)
-            del active_trivia[message.channel.id]
-            return
-    if any(phrase in content for phrase in ["oráculo", "predicción"]):
-        prediction = random.choice([
-            "Hoy, las estrellas te favorecen... ¡pero recuerda usar protector solar!",
-            "El oráculo dice: el mejor momento para actuar es ahora, ¡sin miedo!",
-        ])
-        await message.channel.send(f"🔮 {prediction}")
-        return
-    if content in ["meme", "muéstrame un meme"]:
-        meme_url = get_random_meme()
-        await message.channel.send(meme_url)
-        return
-    if any(phrase in content for phrase in ["juguemos piedra papel tijeras"]):
-        opciones = ["piedra", "papel", "tijeras"]
-        user_choice = next((op for op in opciones if op in content), None)
-        if not user_choice:
-            await message.channel.send("¿Cuál eliges? Indica piedra, papel o tijeras.")
-            return
-        bot_choice = random.choice(opciones)
-        if user_choice == bot_choice:
-            result = "¡Empate!"
-        elif (user_choice == "piedra" and bot_choice == "tijeras") or \
-             (user_choice == "papel" and bot_choice == "piedra") or \
-             (user_choice == "tijeras" and bot_choice == "papel"):
-            result = f"¡Ganaste! Yo elegí **{bot_choice}**."
-            symbolic = award_symbolic_reward(message.author, 1)
-            result += f" Has ganado 1 estrella simbólica. Ahora tienes {symbolic} estrellas simbólicas."
-        else:
-            result = f"Perdiste. Yo elegí **{bot_choice}**. ¡Inténtalo de nuevo!"
-        await message.channel.send(result)
-        return
-    if "duelo de chistes contra" in content:
-        if message.mentions:
-            opponent = message.mentions[0]
-            challenger = message.author
-            joke_challenger = get_random_joke()
-            joke_opponent = get_random_joke()
-            duel_text = (
-                f"**Duelo de Chistes:**\n"
-                f"{challenger.display_name} dice: {joke_challenger}\n"
-                f"{opponent.display_name} dice: {joke_opponent}\n"
-            )
-            winner = random.choice([challenger, opponent])
-            symbolic = award_symbolic_reward(winner, 1)
-            duel_text += f"🎉 ¡El ganador es {winner.display_name}! Ha ganado 1 estrella simbólica. Ahora tiene {symbolic} estrellas simbólicas."
-            await message.channel.send(duel_text)
-            return
     await bot.process_commands(message)
 
 ######################################
@@ -1188,15 +893,15 @@ async def on_message(message):
 @bot.event
 async def on_ready():
     print(f'Bot conectado como {bot.user.name}')
-    bot.loop.create_task(check_event_reminders())
 
 ######################################
 # SERVIDOR WEB PARA MANTENER EL BOT ACTIVO (API PRIVADA)
 ######################################
-def run_webserver():
+def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 if __name__ == '__main__':
-    threading.Thread(target=run_webserver).start()
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
     bot.run(os.getenv('DISCORD_TOKEN'))
