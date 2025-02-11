@@ -20,7 +20,7 @@ OWNER_ID = 1336609089656197171         # Tu Discord ID (único autorizado para c
 PRIVATE_CHANNEL_ID = 1338130641354620988  # Canal privado para comandos sensibles (no se utiliza en la versión final)
 PUBLIC_CHANNEL_ID  = 1338126297666424874  # Canal público donde se muestran resultados sensibles
 SPECIAL_HELP_CHANNEL = 1338608387197243422  # Canal especial para que el owner reciba la lista extendida de comandos
-GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor
+GUILD_ID = 123456789012345678            # REEMPLAZA con el ID real de tu servidor (guild)
 
 API_SECRET = os.environ.get("API_SECRET")  # Para la API privada (opcional)
 
@@ -63,7 +63,8 @@ def init_db():
                 url TEXT NOT NULL
             )
         """)
-        # Se asume que existe una tabla 'registrations' para almacenar el país de los usuarios:
+        # Se asume que la tabla 'registrations' ya existe en la base de datos para almacenar el país de los usuarios
+        # Ejemplo:
         # CREATE TABLE IF NOT EXISTS registrations (
         #    user_id TEXT PRIMARY KEY,
         #    discord_name TEXT,
@@ -631,8 +632,7 @@ async def chiste(ctx):
 
 ######################################
 # COMANDOS SENSIBLES PARA GESTIÓN DE CALENDARIO (EVENTOS) – SOLO OWNER_ID
-####################################
-
+######################################
 @bot.command()
 async def agregar_evento(ctx, *, evento_data: str):
     if not is_owner_and_allowed(ctx):
@@ -690,7 +690,7 @@ async def eliminar_evento(ctx, event_id: int):
     except:
         pass
 
-# MODIFICACIÓN: notificar_evento ahora admite parámetro opcional; si no se pasa, se muestra un menú de selección.
+# MODIFICACIÓN: notificar_evento ahora permite seleccionar el evento (si no se pasa el ID, muestra un menú interactivo)
 @bot.command()
 async def notificar_evento(ctx, event_id: int = None):
     if not is_owner_and_allowed(ctx):
@@ -709,9 +709,7 @@ async def notificar_evento(ctx, event_id: int = None):
     if not event:
         await send_public_message(f"❌ No se encontró el evento con ID {event_id}.")
         return
-    if event["initial_notified"]:
-        await send_public_message(f"❌ El evento con ID {event_id} ya fue notificado previamente.")
-        return
+    # Aquí ya no dependemos de que se haya notificado manualmente; los recordatorios se enviarán automáticamente
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("SELECT * FROM participants WHERE etapa = %s", (event["target_stage"],))
         participants = cur.fetchall()
@@ -736,6 +734,7 @@ async def notificar_evento(ctx, event_id: int = None):
             await asyncio.sleep(1)
         except Exception as e:
             print(f"Error notificar_evento a {participant['id']}: {e}")
+    # Se marca la notificación inicial como enviada (aunque ahora el recordatorio automático se enviará sin intervención previa)
     with conn.cursor() as cur:
         cur.execute("UPDATE calendar_events SET initial_notified = TRUE WHERE id = %s", (event_id,))
     await send_public_message(f"✅ Notificación enviada a {count} participantes para el evento ID {event_id}.")
